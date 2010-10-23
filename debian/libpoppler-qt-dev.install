@@ -1,0 +1,4 @@
+debian/tmp/usr/include/poppler/qt3
+debian/tmp/usr/lib/libpoppler-qt.a
+debian/tmp/usr/lib/libpoppler-qt.so
+debian/tmp/usr/lib/pkgconfig/poppler-qt.pc

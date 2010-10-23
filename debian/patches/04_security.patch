@@ -1,0 +1,257 @@
+diff -Naur poppler-0.12.4.orig//fofi/FoFiType1.cc poppler-0.12.4/fofi/FoFiType1.cc
+--- poppler-0.12.4.orig//fofi/FoFiType1.cc	2010-01-17 01:06:57.000000000 +0100
++++ poppler-0.12.4/fofi/FoFiType1.cc	2010-10-23 20:53:45.000000000 +0200
+@@ -13,7 +13,7 @@
+ // All changes made under the Poppler project to this file are licensed
+ // under GPL version 2 or later
+ //
+-// Copyright (C) 2005, 2008 Albert Astals Cid <aacid@kde.org>
++// Copyright (C) 2005, 2008, 2010 Albert Astals Cid <aacid@kde.org>
+ // Copyright (C) 2005 Kristian Høgsberg <krh@redhat.com>
+ //
+ // To see a description of the changes please see the Changelog file that
+@@ -241,7 +242,7 @@
+ 		code = code * 8 + (*p2 - '0');
+ 	      }
+ 	    }
+-	    if (code < 256) {
++	    if (code < 256 && code >= 0) {
+ 	      for (p = p2; *p == ' ' || *p == '\t'; ++p) ;
+ 	      if (*p == '/') {
+ 		++p;
+diff -Naur poppler-0.12.4.orig//poppler/Decrypt.cc poppler-0.12.4/poppler/Decrypt.cc
+--- poppler-0.12.4.orig//poppler/Decrypt.cc	2010-01-17 01:06:57.000000000 +0100
++++ poppler-0.12.4/poppler/Decrypt.cc	2010-10-23 20:56:09.000000000 +0200
+@@ -229,6 +229,8 @@
+   if ((objKeyLength = keyLength + 5) > 16) {
+     objKeyLength = 16;
+   }
++
++  charactersRead = 0;
+ }
+ 
+ DecryptStream::~DecryptStream() {
+diff -Naur poppler-0.12.4.orig//poppler/Dict.h poppler-0.12.4/poppler/Dict.h
+--- poppler-0.12.4.orig//poppler/Dict.h	2010-01-17 01:06:57.000000000 +0100
++++ poppler-0.12.4/poppler/Dict.h	2010-10-23 20:56:53.000000000 +0200
+@@ -16,6 +16,7 @@
+ // Copyright (C) 2005 Kristian Høgsberg <krh@redhat.com>
+ // Copyright (C) 2006 Krzysztof Kowalczyk <kkowalczyk@gmail.com>
+ // Copyright (C) 2007-2008 Julien Rebetez <julienr@svn.gnome.org>
++// Copyright (C) 2010 Albert Astals Cid <aacid@kde.org>
+ //
+ // To see a description of the changes please see the Changelog file that
+ // came with your tarball or type make ChangeLog if you are building from git
+@@ -83,6 +84,8 @@
+   // trailer dictionary, which is read before the xref table is
+   // parsed.
+   void setXRef(XRef *xrefA) { xref = xrefA; }
++  
++  XRef *getXRef() { return xref; }
+ 
+ private:
+ 
+diff -Naur poppler-0.12.4.orig//poppler/Form.cc poppler-0.12.4/poppler/Form.cc
+--- poppler-0.12.4.orig//poppler/Form.cc	2010-01-17 01:06:57.000000000 +0100
++++ poppler-0.12.4/poppler/Form.cc	2010-10-23 20:56:53.000000000 +0200
+@@ -22,6 +22,7 @@
+ #pragma implementation
+ #endif
+ 
++#include <set>
+ #include <stddef.h>
+ #include <string.h>
+ #include "goo/gmem.h"
+@@ -715,13 +716,14 @@
+     // Load children
+     for(int i=0; i<length; i++) { 
+       Object obj2,obj3;
+-      Object childRef;
+       array->get(i, &obj2);
+-      array->getNF(i, &childRef);
+       if (!obj2.isDict ()) {
+ 	      error (-1, "Reference to an invalid or non existant object");
++	      obj2.free();
+ 	      continue;
+       }
++      Object childRef;
++      array->getNF(i, &childRef);
+       //field child
+       if (dict->lookup ("FT", &obj3)->isName()) {
+         // If I'm not a generic container field and my children
+@@ -1180,7 +1182,7 @@
+ }
+ 
+ // Look up an inheritable field dictionary entry.
+-Object *Form::fieldLookup(Dict *field, char *key, Object *obj) {
++static Object *fieldLookup(Dict *field, char *key, Object *obj, std::set<int> *usedParents) {
+   Dict *dict;
+   Object parent;
+ 
+@@ -1189,8 +1191,23 @@
+     return obj;
+   }
+   obj->free();
+-  if (dict->lookup("Parent", &parent)->isDict()) {
+-    fieldLookup(parent.getDict(), key, obj);
++  dict->lookupNF("Parent", &parent);
++  if (parent.isRef()) {
++    const Ref ref = parent.getRef();
++    if (usedParents->find(ref.num) == usedParents->end()) {
++      usedParents->insert(ref.num);
++
++      Object obj2;
++      parent.fetch(dict->getXRef(), &obj2);
++      if (obj2.isDict()) {
++        fieldLookup(obj2.getDict(), key, obj, usedParents);
++      } else {
++        obj->initNull();
++      }
++      obj2.free();
++    }
++  } else if (parent.isDict()) {
++    fieldLookup(parent.getDict(), key, obj, usedParents);
+   } else {
+     obj->initNull();
+   }
+@@ -1198,6 +1215,11 @@
+   return obj;
+ }
+ 
++Object *Form::fieldLookup(Dict *field, char *key, Object *obj) {
++  std::set<int> usedParents;
++  return ::fieldLookup(field, key, obj, &usedParents);
++}
++
+ FormField *Form::createFieldFromDict (Object* obj, XRef *xrefA, const Ref& pref)
+ {
+     Object obj2;
+diff -Naur poppler-0.12.4.orig//poppler/Function.cc poppler-0.12.4/poppler/Function.cc
+--- poppler-0.12.4.orig//poppler/Function.cc	2010-01-17 01:06:57.000000000 +0100
++++ poppler-0.12.4/poppler/Function.cc	2010-10-23 20:56:24.000000000 +0200
+@@ -422,7 +422,11 @@
+       for (k = 0, t = j; k < m; ++k, t >>= 1) {
+ 	idx += idxMul[k] * (e[k][t & 1]);
+       }
+-      sBuf[j] = samples[idx];
++      if (likely(idx >= 0 && idx < nSamples)) {
++        sBuf[j] = samples[idx];
++      } else {
++        sBuf[j] = 0; // TODO Investigate if this is what Adobe does
++      }
+     }
+ 
+     // do m sets of interpolations
+@@ -1106,6 +1110,7 @@
+   code = NULL;
+   codeString = NULL;
+   codeSize = 0;
++  stack = NULL;
+   ok = gFalse;
+   cache = new PopplerCache(5);
+ 
+diff -Naur poppler-0.12.4.orig//poppler/Gfx.cc poppler-0.12.4/poppler/Gfx.cc
+--- poppler-0.12.4.orig//poppler/Gfx.cc	2010-01-23 00:54:42.000000000 +0100
++++ poppler-0.12.4/poppler/Gfx.cc	2010-10-23 20:57:21.000000000 +0200
+@@ -518,6 +518,7 @@
+   drawText = gFalse;
+   maskHaveCSPattern = gFalse;
+   mcStack = NULL;
++  parser = NULL;
+ 
+   // start the resource stack
+   res = new GfxResources(xref, resDict, NULL);
+@@ -570,6 +571,7 @@
+   drawText = gFalse;
+   maskHaveCSPattern = gFalse;
+   mcStack = NULL;
++  parser = NULL;
+ 
+   // start the resource stack
+   res = new GfxResources(xref, resDict, NULL);
+@@ -1480,6 +1482,8 @@
+       for (i = 0; i < numArgs - 1 && i < gfxColorMaxComps; ++i) {
+ 	if (args[i].isNum()) {
+ 	  color.c[i] = dblToCol(args[i].getNum());
++	} else {
++	  color.c[i] = 0; // TODO Investigate if this is what Adobe does
+ 	}
+       }
+       state->setFillColor(&color);
+@@ -1499,6 +1503,8 @@
+     for (i = 0; i < numArgs && i < gfxColorMaxComps; ++i) {
+       if (args[i].isNum()) {
+ 	color.c[i] = dblToCol(args[i].getNum());
++      } else {
++        color.c[i] = 0; // TODO Investigate if this is what Adobe does
+       }
+     }
+     state->setFillColor(&color);
+@@ -1523,6 +1529,8 @@
+       for (i = 0; i < numArgs - 1 && i < gfxColorMaxComps; ++i) {
+ 	if (args[i].isNum()) {
+ 	  color.c[i] = dblToCol(args[i].getNum());
++	} else {
++	  color.c[i] = 0; // TODO Investigate if this is what Adobe does
+ 	}
+       }
+       state->setStrokeColor(&color);
+@@ -1542,6 +1550,8 @@
+     for (i = 0; i < numArgs && i < gfxColorMaxComps; ++i) {
+       if (args[i].isNum()) {
+ 	color.c[i] = dblToCol(args[i].getNum());
++      } else {
++        color.c[i] = 0; // TODO Investigate if this is what Adobe does
+       }
+     }
+     state->setStrokeColor(&color);
+@@ -4182,8 +4192,14 @@
+   }
+   for (i = 0; i < 4; ++i) {
+     bboxObj.arrayGet(i, &obj1);
+-    bbox[i] = obj1.getNum();
+-    obj1.free();
++    if (likely(obj1.isNum())) {
++      bbox[i] = obj1.getNum();
++      obj1.free();
++    } else {
++      obj1.free();
++      error(getPos(), "Bad form bounding box value");
++      return;
++    }
+   }
+   bboxObj.free();
+ 
+@@ -4406,8 +4422,13 @@
+   obj.free();
+ 
+   // make stream
+-  str = new EmbedStream(parser->getStream(), &dict, gFalse, 0);
+-  str = str->addFilters(&dict);
++  if (parser->getStream()) {
++    str = new EmbedStream(parser->getStream(), &dict, gFalse, 0);
++    str = str->addFilters(&dict);
++  } else {
++    str = NULL;
++    dict.free();
++  }
+ 
+   return str;
+ }
+@@ -4606,8 +4627,14 @@
+     }
+     for (i = 0; i < 4; ++i) {
+       bboxObj.arrayGet(i, &obj1);
+-      bbox[i] = obj1.getNum();
+-      obj1.free();
++      if (likely(obj1.isNum())) {
++        bbox[i] = obj1.getNum();
++        obj1.free();
++      } else {
++        obj1.free();
++        error(getPos(), "Bad form bounding box value");
++        return;
++      }
+     }
+     bboxObj.free();
+ 
