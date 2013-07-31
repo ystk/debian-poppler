@@ -1,3 +1,33 @@
+poppler (0.12.4-1.2+squeeze3) oldstable-security; urgency=high
+
+  * Upload to oldstable-security.
+
+ -- Michael Gilbert <mgilbert@debian.org>  Sun, 07 Jul 2013 18:46:43 +0000
+
+poppler (0.12.4-1.2+squeeze2) stable; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * Fix cve-2013-1788: invalid memory access issues.
+  * Fix cve-2013-1790: uninitialized memory issue.
+
+ -- Michael Gilbert <mgilbert@debian.org>  Fri, 05 Jul 2013 21:25:34 +0000
+
+poppler (0.12.4-1.2+squeeze1) stable; urgency=low
+
+  * Add myself as uploader.
+  * Fix CVE-2010-0206.
+  * Fix CVE-2010-0207; patch adapted to be API-/ABI-compatible.
+  * Fix CVE-2010-4653; patch adapted to include object.h instead
+    of goo/GooLikely.h (non-existent in poppler 0.12.x).
+  * Backport upstream commits 7ba15d11e56175601104d125d5e4a47619c224bf and
+    55940e989701eb9118015e30f4f48eb654fa34c4 to fix GooString::insert;
+    patch upstream_fix-GooString-insert.diff. (Closes: #693817)
+  * Correctly initialize PSOutputDev::fontFileNameLen and
+    PSOutputDev::psFileNames; patch psoutputdev-initialize-vars.diff.
+    (Closes: #699421)
+
+ -- Pino Toscano <pino@debian.org>  Thu, 14 Feb 2013 13:05:25 +0100
+
 poppler (0.12.4-1.2) unstable; urgency=medium
 
   * Non-maintainer upload by the Security Team

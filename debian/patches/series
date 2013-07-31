@@ -2,3 +2,12 @@
 02_autohinting_abi_compatibility.patch
 03_CVE-2009-3938.patch
 04_security.patch
+05_CVE-2010-0206.patch
+06_CVE-2010-0207.patch
+07_CVE-2010-4653.patch
+upstream_fix-GooString-insert.diff
+psoutputdev-initialize-vars.diff
+CVE-2013-1788-part1.patch
+CVE-2013-1788-part2.patch
+CVE-2013-1788-part3.patch
+CVE-2013-1790.patch
