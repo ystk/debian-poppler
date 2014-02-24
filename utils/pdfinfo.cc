@@ -14,7 +14,8 @@
 // under GPL version 2 or later
 //
 // Copyright (C) 2006 Dom Lachowicz <cinamod@hotmail.com>
-// Copyright (C) 2007-2009 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2007-2010 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2010 Hib Eris <hib@hiberis.nl>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -42,6 +43,7 @@
 #include "Catalog.h"
 #include "Page.h"
 #include "PDFDoc.h"
+#include "PDFDocFactory.h"
 #include "CharTypes.h"
 #include "UnicodeMap.h"
 #include "PDFDocEncoding.h"
@@ -121,6 +123,8 @@ int main(int argc, char *argv[]) {
     if (!printVersion) {
       printUsage("pdfinfo", "<PDF-file>", argDesc);
     }
+    if (printVersion || printHelp)
+      exitCode = 0;
     goto err0;
   }
 
@@ -130,6 +134,7 @@ int main(int argc, char *argv[]) {
   if (printEnc) {
     printEncodings();
     delete globalParams;
+    exitCode = 0;
     goto err0;
   }
 
@@ -158,14 +163,12 @@ int main(int argc, char *argv[]) {
     userPW = NULL;
   }
 
-  if(fileName->cmp("-") != 0) {
-      doc = new PDFDoc(fileName, ownerPW, userPW);
-  } else {
-      Object obj;
-
-      obj.initNull();
-      doc = new PDFDoc(new FileStream(stdin, 0, gFalse, 0, &obj), ownerPW, userPW);
+  if (fileName->cmp("-") == 0) {
+      delete fileName;
+      fileName = new GooString("fd://0");
   }
+
+  doc = PDFDocFactory().createPDFDoc(*fileName, ownerPW, userPW);
 
   if (userPW) {
     delete userPW;
@@ -257,7 +260,11 @@ int main(int argc, char *argv[]) {
   if (printBoxes) {
     if (multiPage) {
       for (pg = firstPage; pg <= lastPage; ++pg) {
-	page = doc->getCatalog()->getPage(pg);
+	page = doc->getPage(pg);
+	if (!page) {
+          error(-1, "Failed to print boxes for page %d", pg);
+	  continue;
+	}
 	sprintf(buf, "Page %4d MediaBox: ", pg);
 	printBox(buf, page->getMediaBox());
 	sprintf(buf, "Page %4d CropBox:  ", pg);
@@ -270,12 +277,16 @@ int main(int argc, char *argv[]) {
 	printBox(buf, page->getArtBox());
       }
     } else {
-      page = doc->getCatalog()->getPage(firstPage);
-      printBox("MediaBox:       ", page->getMediaBox());
-      printBox("CropBox:        ", page->getCropBox());
-      printBox("BleedBox:       ", page->getBleedBox());
-      printBox("TrimBox:        ", page->getTrimBox());
-      printBox("ArtBox:         ", page->getArtBox());
+      page = doc->getPage(firstPage);
+      if (!page) {
+        error(-1, "Failed to print boxes for page %d", firstPage);
+      } else {
+        printBox("MediaBox:       ", page->getMediaBox());
+        printBox("CropBox:        ", page->getCropBox());
+        printBox("BleedBox:       ", page->getBleedBox());
+        printBox("TrimBox:        ", page->getTrimBox());
+        printBox("ArtBox:         ", page->getArtBox());
+      }
     }
   }
 
@@ -319,6 +330,7 @@ int main(int argc, char *argv[]) {
  err2:
   uMap->decRefCnt();
   delete doc;
+  delete fileName;
  err1:
   delete globalParams;
  err0:

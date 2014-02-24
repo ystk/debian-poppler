@@ -17,6 +17,13 @@
 // Copyright (C) 2008 Richard Airlie <richard.airlie@maglabs.net>
 // Copyright (C) 2009 Michael K. Johnson <a1237@danlj.org>
 // Copyright (C) 2009 Shen Liang <shenzhuxi@gmail.com>
+// Copyright (C) 2009 Stefan Thomas <thomas@eload24.com>
+// Copyright (C) 2009-2011 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2010 Adrian Johnson <ajohnson@redneon.com>
+// Copyright (C) 2010 Hib Eris <hib@hiberis.nl>
+// Copyright (C) 2010 Jonathan Liu <net147@gmail.com>
+// Copyright (C) 2010 William Bader <williambader@hotmail.com>
+// Copyright (C) 2011 Thomas Freitag <Thomas.Freitag@alfa.de>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -25,6 +32,10 @@
 
 #include "config.h"
 #include <poppler-config.h>
+#ifdef _WIN32
+#include <fcntl.h> // for O_BINARY
+#include <io.h>    // for setmode
+#endif
 #include <stdio.h>
 #include <math.h>
 #include "parseargs.h"
@@ -33,6 +44,7 @@
 #include "GlobalParams.h"
 #include "Object.h"
 #include "PDFDoc.h"
+#include "PDFDocFactory.h"
 #include "splash/SplashBitmap.h"
 #include "splash/Splash.h"
 #include "SplashOutputDev.h"
@@ -41,6 +53,9 @@
 
 static int firstPage = 1;
 static int lastPage = 0;
+static GBool printOnlyOdd = gFalse;
+static GBool printOnlyEven = gFalse;
+static GBool singleFile = gFalse;
 static double resolution = 0.0;
 static double x_resolution = 150.0;
 static double y_resolution = 150.0;
@@ -56,11 +71,18 @@ static GBool useCropBox = gFalse;
 static GBool mono = gFalse;
 static GBool gray = gFalse;
 static GBool png = gFalse;
+static GBool jpeg = gFalse;
+static GBool jpegcmyk = gFalse;
+static GBool tiff = gFalse;
+#if SPLASH_CMYK
+static GBool overprint = gFalse;
+#endif
 static char enableFreeTypeStr[16] = "";
 static char antialiasStr[16] = "";
 static char vectorAntialiasStr[16] = "";
 static char ownerPassword[33] = "";
 static char userPassword[33] = "";
+static char TiffCompressionStr[16] = "";
 static GBool quiet = gFalse;
 static GBool printVersion = gFalse;
 static GBool printHelp = gFalse;
@@ -70,6 +92,12 @@ static const ArgDesc argDesc[] = {
    "first page to print"},
   {"-l",      argInt,      &lastPage,      0,
    "last page to print"},
+  {"-o",      argFlag,      &printOnlyOdd, 0,
+   "print only odd pages"},
+  {"-e",      argFlag,      &printOnlyEven, 0,
+   "print only even pages"},
+  {"-singlefile", argFlag,  &singleFile,   0,
+   "write only the first page and do not add digits"},
 
   {"-r",      argFP,       &resolution,    0,
    "resolution, in DPI (default is 150)"},
@@ -104,6 +132,24 @@ static const ArgDesc argDesc[] = {
 #if ENABLE_LIBPNG
   {"-png",    argFlag,     &png,           0,
    "generate a PNG file"},
+#endif
+#if ENABLE_LIBJPEG
+  {"-jpeg",   argFlag,     &jpeg,           0,
+   "generate a JPEG file"},
+#if SPLASH_CMYK
+  {"-jpegcmyk",argFlag,    &jpegcmyk,       0,
+   "generate a CMYK JPEG file"},
+#endif
+#endif
+#if SPLASH_CMYK
+  {"-overprint",argFlag,   &overprint,      0,
+   "enable overprint"},
+#endif
+#if ENABLE_LIBTIFF
+  {"-tiff",    argFlag,     &tiff,           0,
+   "generate a TIFF file"},
+  {"-tiffcompression", argString, TiffCompressionStr, sizeof(TiffCompressionStr),
+   "set TIFF compression: none, packbits, jpeg, lzw, deflate"},
 #endif
 #if HAVE_FREETYPE_FREETYPE_H | HAVE_FREETYPE_H
   {"-freetype",   argString,      enableFreeTypeStr, sizeof(enableFreeTypeStr),
@@ -150,19 +196,48 @@ static void savePageSlice(PDFDoc *doc,
     !useCropBox, gFalse, gFalse,
     x, y, w, h
   );
+
+  SplashBitmap *bitmap = splashOut->getBitmap();
+  
   if (ppmFile != NULL) {
     if (png) {
-      splashOut->getBitmap()->writePNGFile(ppmFile);
+      bitmap->writeImgFile(splashFormatPng, ppmFile, x_resolution, y_resolution);
+    } else if (jpeg) {
+      bitmap->writeImgFile(splashFormatJpeg, ppmFile, x_resolution, y_resolution);
+    } else if (jpegcmyk) {
+      bitmap->writeImgFile(splashFormatJpegCMYK, ppmFile, x_resolution, y_resolution);
+    } else if (tiff) {
+      bitmap->writeImgFile(splashFormatTiff, ppmFile, x_resolution, y_resolution, TiffCompressionStr);
     } else {
-      splashOut->getBitmap()->writePNMFile(ppmFile);
+      bitmap->writePNMFile(ppmFile);
     }
   } else {
+#ifdef _WIN32
+    setmode(fileno(stdout), O_BINARY);
+#endif
+
     if (png) {
-      splashOut->getBitmap()->writePNGFile(stdout);
+      bitmap->writeImgFile(splashFormatPng, stdout, x_resolution, y_resolution);
+    } else if (jpeg) {
+      bitmap->writeImgFile(splashFormatJpeg, stdout, x_resolution, y_resolution);
+    } else if (tiff) {
+      bitmap->writeImgFile(splashFormatTiff, stdout, x_resolution, y_resolution, TiffCompressionStr);
     } else {
-      splashOut->getBitmap()->writePNMFile(stdout);
+      bitmap->writePNMFile(stdout);
     }
   }
+}
+
+static int numberOfCharacters(unsigned int n)
+{
+  int charNum = 0;
+  while (n >= 10)
+  {
+    n = n / 10;
+    charNum++;
+  }
+  charNum++;
+  return charNum;
 }
 
 int main(int argc, char *argv[]) {
@@ -198,6 +273,8 @@ int main(int argc, char *argv[]) {
     if (!printVersion) {
       printUsage("pdftoppm", "[PDF-file [PPM-file-prefix]]", argDesc);
     }
+    if (printVersion || printHelp)
+      exitCode = 0;
     goto err0;
   }
   if (argc > 1) fileName = new GooString(argv[1]);
@@ -235,14 +312,17 @@ int main(int argc, char *argv[]) {
   } else {
     userPW = NULL;
   }
-  if(fileName != NULL && fileName->cmp("-") != 0) {
-      doc = new PDFDoc(fileName, ownerPW, userPW);
-  } else {
-      Object obj;
 
-      obj.initNull();
-      doc = new PDFDoc(new FileStream(stdin, 0, gFalse, 0, &obj), ownerPW, userPW);
+  if (fileName == NULL) {
+    fileName = new GooString("fd://0");
   }
+  if (fileName->cmp("-") == 0) {
+    delete fileName;
+    fileName = new GooString("fd://0");
+  }
+  doc = PDFDocFactory().createPDFDoc(*fileName, ownerPW, userPW);
+  delete fileName;
+
   if (userPW) {
     delete userPW;
   }
@@ -257,21 +337,47 @@ int main(int argc, char *argv[]) {
   // get page range
   if (firstPage < 1)
     firstPage = 1;
+  if (singleFile && lastPage < 1)
+    lastPage = firstPage;
   if (lastPage < 1 || lastPage > doc->getNumPages())
     lastPage = doc->getNumPages();
 
+  if (singleFile && firstPage < lastPage) {
+    if (!quiet) {
+      fprintf(stderr,
+        "Warning: Single file will write only the first of the %d pages.\n",
+        lastPage + 1 - firstPage);
+    }
+    lastPage = firstPage;
+  }
+
   // write PPM files
-  paperColor[0] = 255;
-  paperColor[1] = 255;
-  paperColor[2] = 255;
+#if SPLASH_CMYK
+  if (jpegcmyk || overprint) {
+    paperColor[0] = 0;
+    paperColor[1] = 0;
+    paperColor[2] = 0;
+    paperColor[3] = 0;
+  } else 
+#endif
+  {
+    paperColor[0] = 255;
+    paperColor[1] = 255;
+    paperColor[2] = 255;
+  }
   splashOut = new SplashOutputDev(mono ? splashModeMono1 :
 				    gray ? splashModeMono8 :
+#if SPLASH_CMYK
+				    (jpegcmyk || overprint) ? splashModeCMYK8 :
+#endif
 				             splashModeRGB8, 4,
 				  gFalse, paperColor);
   splashOut->startDoc(doc->getXRef());
   if (sz != 0) w = h = sz;
-  pg_num_len = (int)ceil(log((double)doc->getNumPages()) / log((double)10));
+  pg_num_len = numberOfCharacters(doc->getNumPages());
   for (pg = firstPage; pg <= lastPage; ++pg) {
+    if (printOnlyEven && pg % 2 == 0) continue;
+    if (printOnlyOdd && pg % 2 == 1) continue;
     if (useCropBox) {
       pg_w = doc->getPageCropWidth(pg);
       pg_h = doc->getPageCropHeight(pg);
@@ -293,15 +399,20 @@ int main(int argc, char *argv[]) {
     }
     pg_w = pg_w * (x_resolution / 72.0);
     pg_h = pg_h * (y_resolution / 72.0);
-    if (doc->getPageRotate(pg)) {
+    if ((doc->getPageRotate(pg) == 90) || (doc->getPageRotate(pg) == 270)) {
       tmp = pg_w;
       pg_w = pg_h;
       pg_h = tmp;
     }
     if (ppmRoot != NULL) {
-      snprintf(ppmFile, PPM_FILE_SZ, "%.*s-%0*d.%s",
-              PPM_FILE_SZ - 32, ppmRoot, pg_num_len, pg,
-              png ? "png" : mono ? "pbm" : gray ? "pgm" : "ppm");
+      const char *ext = png ? "png" : (jpeg || jpegcmyk) ? "jpg" : tiff ? "tif" : mono ? "pbm" : gray ? "pgm" : "ppm";
+      if (singleFile) {
+        snprintf(ppmFile, PPM_FILE_SZ, "%.*s.%s",
+              PPM_FILE_SZ - 32, ppmRoot, ext);
+      } else {
+        snprintf(ppmFile, PPM_FILE_SZ, "%.*s-%0*d.%s",
+              PPM_FILE_SZ - 32, ppmRoot, pg_num_len, pg, ext);
+      }
       savePageSlice(doc, splashOut, pg, x, y, w, h, pg_w, pg_h, ppmFile);
     } else {
       savePageSlice(doc, splashOut, pg, x, y, w, h, pg_w, pg_h, NULL);

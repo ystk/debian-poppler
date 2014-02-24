@@ -10,9 +10,12 @@
 //
 // Modified under the Poppler project - http://poppler.freedesktop.org
 //
+// All changes made under the Poppler project to this file are licensed
+// under GPL version 2 or later
+//
 // Copyright (C) 2005 Martin Kretzschmar <martink@gnome.org>
 // Copyright (C) 2005, 2006 Kristian Høgsberg <krh@redhat.com>
-// Copyright (C) 2005, 2007-2009 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2005, 2007-2010 Albert Astals Cid <aacid@kde.org>
 // Copyright (C) 2005 Jonathan Blandford <jrb@redhat.com>
 // Copyright (C) 2006, 2007 Jeff Muizelaar <jeff@infidigm.net>
 // Copyright (C) 2006 Takashi Iwai <tiwai@suse.de>
@@ -20,8 +23,14 @@
 // Copyright (C) 2007 Krzysztof Kowalczyk <kkowalczyk@gmail.com>
 // Copyright (C) 2007, 2009 Jonathan Kew <jonathan_kew@sil.org>
 // Copyright (C) 2009 Petr Gajdos <pgajdos@novell.com>
-// Copyright (C) 2009 William Bader <williambader@hotmail.com>
+// Copyright (C) 2009, 2011 William Bader <williambader@hotmail.com>
 // Copyright (C) 2009 Kovid Goyal <kovid@kovidgoyal.net>
+// Copyright (C) 2010 Hib Eris <hib@hiberis.nl>
+// Copyright (C) 2010 Patrick Spendrin <ps_ml@gmx.de>
+// Copyright (C) 2010 Jakub Wilk <ubanus@users.sf.net>
+// Copyright (C) 2011 Pino Toscano <pino@kde.org>
+// Copyright (C) 2011 Koji Otani <sho@bbr.jp>
+// Copyright (C) 2012 Yi Yang <ahyangyi@gmail.com>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -44,6 +53,7 @@
 #endif
 #ifdef _WIN32
 #  include <shlobj.h>
+#  include <mbstring.h>
 #endif
 #include "goo/gmem.h"
 #include "goo/GooString.h"
@@ -63,8 +73,14 @@
 #include "GlobalParams.h"
 #include "GfxFont.h"
 
+#if WITH_FONTCONFIGURATION_FONTCONFIG
+#include <fontconfig/fontconfig.h>
+#endif
+
 #ifdef _WIN32
 #  define strcasecmp stricmp
+#else
+#  include <strings.h>
 #endif
 
 #if MULTITHREADED
@@ -139,6 +155,62 @@ DisplayFontParam::~DisplayFontParam() {
     break;
   }
 }
+
+#if ENABLE_RELOCATABLE && defined(_WIN32)
+
+/* search for data relative to where we are installed */
+
+static HMODULE hmodule;
+
+extern "C" {
+BOOL WINAPI
+DllMain (HINSTANCE hinstDLL,
+	 DWORD     fdwReason,
+	 LPVOID    lpvReserved)
+{
+  switch (fdwReason)
+    {
+    case DLL_PROCESS_ATTACH:
+      hmodule = hinstDLL;
+      break;
+    }
+
+  return TRUE;
+}
+}
+
+static char *
+get_poppler_datadir (void)
+{
+  static char retval[MAX_PATH];
+  static int beenhere = 0;
+
+  unsigned char *p;
+
+  if (beenhere)
+    return retval;
+
+  if (!GetModuleFileName (hmodule, (CHAR *) retval, sizeof(retval) - 20))
+    return POPPLER_DATADIR;
+
+  p = _mbsrchr ((unsigned char *) retval, '\\');
+  *p = '\0';
+  p = _mbsrchr ((unsigned char *) retval, '\\');
+  if (p) {
+    if (stricmp ((const char *) (p+1), "bin") == 0)
+      *p = '\0';
+  }
+  strcat (retval, "\\share\\poppler");
+
+  beenhere = 1;
+
+  return retval;
+}
+
+#undef POPPLER_DATADIR
+#define POPPLER_DATADIR get_poppler_datadir ()
+
+#endif
 
 #ifdef _WIN32
 
@@ -557,11 +629,6 @@ GlobalParams::GlobalParams(const char *customPopplerDataDir)
   UnicodeMap *map;
   int i;
 
-#ifndef _MSC_VER  
-  FcInit();
-  FCcfg = FcConfigGetCurrent();
-#endif
-
 #if MULTITHREADED
   gInitMutex(&mutex);
   gInitMutex(&unicodeMapCacheMutex);
@@ -608,6 +675,7 @@ GlobalParams::GlobalParams(const char *customPopplerDataDir)
   psPreload = gFalse;
   psOPI = gFalse;
   psASCIIHex = gFalse;
+  psBinary = gFalse;
   textEncoding = new GooString("UTF-8");
 #if defined(_WIN32)
   textEOL = eolDOS;
@@ -634,6 +702,7 @@ GlobalParams::GlobalParams(const char *customPopplerDataDir)
   printCommands = gFalse;
   profileCommands = gFalse;
   errQuiet = gFalse;
+  splashResolution = 0.0;
 
   cidToUnicodeCache = new CharCodeToUnicodeCache(cidToUnicodeCacheSize);
   unicodeToUnicodeCache =
@@ -730,6 +799,7 @@ void GlobalParams::parseNameToUnicode(GooString *name) {
   char buf[256];
   int line;
   Unicode u;
+  char *tokptr;
 
   if (!(f = fopen(name->getCString(), "r"))) {
     error(-1, "Couldn't open 'nameToUnicode' file '%s'",
@@ -738,8 +808,8 @@ void GlobalParams::parseNameToUnicode(GooString *name) {
   }
   line = 1;
   while (getLine(buf, sizeof(buf), f)) {
-    tok1 = strtok(buf, " \t\r\n");
-    tok2 = strtok(NULL, " \t\r\n");
+    tok1 = strtok_r(buf, " \t\r\n", &tokptr);
+    tok2 = strtok_r(NULL, " \t\r\n", &tokptr);
     if (tok1 && tok2) {
       sscanf(tok1, "%x", &u);
       nameToUnicode->add(tok2, u);
@@ -944,6 +1014,7 @@ FILE *GlobalParams::findToUnicodeFile(GooString *name) {
   return NULL;
 }
 
+#if WITH_FONTCONFIGURATION_FONTCONFIG
 static GBool findModifier(const char *name, const char *modifier, const char **start)
 {
   const char *match;
@@ -962,7 +1033,42 @@ static GBool findModifier(const char *name, const char *modifier, const char **s
   }
 }
 
-#ifndef _MSC_VER
+static char *getFontLang(GfxFont *font)
+{
+  char *lang;
+
+  // find the language we want the font to support
+  if (font->isCIDFont())
+  {
+    GooString *collection = ((GfxCIDFont *)font)->getCollection();
+    if (collection)
+    {
+      if (strcmp(collection->getCString(), "Adobe-GB1") == 0)
+        lang = "zh-cn"; // Simplified Chinese
+      else if (strcmp(collection->getCString(), "Adobe-CNS1") == 0)
+        lang = "zh-tw"; // Traditional Chinese
+      else if (strcmp(collection->getCString(), "Adobe-Japan1") == 0)
+        lang = "ja"; // Japanese
+      else if (strcmp(collection->getCString(), "Adobe-Japan2") == 0)
+        lang = "ja"; // Japanese
+      else if (strcmp(collection->getCString(), "Adobe-Korea1") == 0)
+        lang = "ko"; // Korean
+      else if (strcmp(collection->getCString(), "Adobe-UCS") == 0)
+        lang = "xx";
+      else if (strcmp(collection->getCString(), "Adobe-Identity") == 0)
+        lang = "xx";
+      else
+      {
+        error(-1, "Unknown CID font collection, please report to poppler bugzilla.");
+        lang = "xx";
+      }
+    }
+    else lang = "xx";
+  }
+  else lang = "xx";
+  return lang;
+}
+
 static FcPattern *buildFcPattern(GfxFont *font)
 {
   int weight = -1,
@@ -999,6 +1105,8 @@ static FcPattern *buildFcPattern(GfxFont *font)
     weight = FC_WEIGHT_BOLD;
   if (findModifier(modifiers, "Light", &start))
     weight = FC_WEIGHT_LIGHT;
+  if (findModifier(modifiers, "Medium", &start))
+    weight = FC_WEIGHT_MEDIUM;
   if (findModifier(modifiers, "Condensed", &start))
     width = FC_WIDTH_CONDENSED;
   
@@ -1062,35 +1170,7 @@ static FcPattern *buildFcPattern(GfxFont *font)
     default: break; 
   }
   
-  // find the language we want the font to support
-  if (font->isCIDFont())
-  {
-    GooString *collection = ((GfxCIDFont *)font)->getCollection();
-    if (collection)
-    {
-      if (strcmp(collection->getCString(), "Adobe-GB1") == 0)
-        lang = "zh-cn"; // Simplified Chinese
-      else if (strcmp(collection->getCString(), "Adobe-CNS1") == 0)
-        lang = "zh-tw"; // Traditional Chinese
-      else if (strcmp(collection->getCString(), "Adobe-Japan1") == 0)
-        lang = "ja"; // Japanese
-      else if (strcmp(collection->getCString(), "Adobe-Japan2") == 0)
-        lang = "ja"; // Japanese
-      else if (strcmp(collection->getCString(), "Adobe-Korea1") == 0)
-        lang = "ko"; // Korean
-      else if (strcmp(collection->getCString(), "Adobe-UCS") == 0)
-        lang = "xx";
-      else if (strcmp(collection->getCString(), "Adobe-Identity") == 0)
-        lang = "xx";
-      else
-      {
-        error(-1, "Unknown CID font collection, please report to poppler bugzilla.");
-        lang = "xx";
-      }
-    }
-    else lang = "xx";
-  }
-  else lang = "xx";
+  lang = getFontLang(font);
   
   p = FcPatternBuild(NULL,
                     FC_FAMILY, FcTypeString, family,
@@ -1110,7 +1190,7 @@ static FcPattern *buildFcPattern(GfxFont *font)
 /* if you can't or don't want to use Fontconfig, you need to implement
    this function for your platform. For Windows, it's in GlobalParamsWin.cc
 */
-#ifndef _MSC_VER
+#if WITH_FONTCONFIGURATION_FONTCONFIG
 DisplayFontParam *GlobalParams::getDisplayFont(GfxFont *font) {
   DisplayFontParam *dfp;
   FcPattern *p=0;
@@ -1127,38 +1207,70 @@ DisplayFontParam *GlobalParams::getDisplayFont(GfxFont *font) {
     FcResult res;
     FcFontSet *set;
     int i;
+    FcLangSet *lb = NULL;
+    char *lang;
     p = buildFcPattern(font);
 
     if (!p)
       goto fin;
-    FcConfigSubstitute(FCcfg, p, FcMatchPattern);
+    FcConfigSubstitute(NULL, p, FcMatchPattern);
     FcDefaultSubstitute(p);
-    set = FcFontSort(FCcfg, p, FcFalse, NULL, &res);
+    set = FcFontSort(NULL, p, FcFalse, NULL, &res);
     if (!set)
       goto fin;
-    for (i = 0; i < set->nfont; ++i)
+
+    // find the language we want the font to support
+    lang = getFontLang(font);
+    if (strcmp(lang,"xx") != 0) {
+      lb = FcLangSetCreate();
+      FcLangSetAdd(lb,(FcChar8 *)lang);
+    }
+
+    /*
+      scan twice.
+      first: fonts support the language
+      second: all fonts (fall back)
+    */
+    while (dfp == NULL)
     {
-      res = FcPatternGetString(set->fonts[i], FC_FILE, 0, &s);
-      if (res != FcResultMatch || !s)
-        continue;
-      ext = strrchr((char*)s,'.');
-      if (!ext)
-        continue;
-      if (!strncasecmp(ext,".ttf",4) || !strncasecmp(ext, ".ttc", 4))
+      for (i = 0; i < set->nfont; ++i)
       {
-        dfp = new DisplayFontParam(fontName->copy(), displayFontTT);  
-        dfp->tt.fileName = new GooString((char*)s);
-        FcPatternGetInteger(set->fonts[i], FC_INDEX, 0, &(dfp->tt.faceIndex));
+        res = FcPatternGetString(set->fonts[i], FC_FILE, 0, &s);
+        if (res != FcResultMatch || !s)
+          continue;
+        if (lb != NULL) {
+          FcLangSet *l;
+          res = FcPatternGetLangSet(set->fonts[i], FC_LANG, 0, &l);
+          if (res != FcResultMatch || !FcLangSetContains(l,lb)) {
+            continue;
+          }
+        }
+        ext = strrchr((char*)s,'.');
+        if (!ext)
+          continue;
+        if (!strncasecmp(ext,".ttf",4) || !strncasecmp(ext, ".ttc", 4) || !strncasecmp(ext, ".otf", 4))
+        {
+          dfp = new DisplayFontParam(fontName->copy(), displayFontTT);  
+          dfp->tt.fileName = new GooString((char*)s);
+          FcPatternGetInteger(set->fonts[i], FC_INDEX, 0, &(dfp->tt.faceIndex));
+        }
+        else if (!strncasecmp(ext,".pfa",4) || !strncasecmp(ext,".pfb",4)) 
+        {
+          dfp = new DisplayFontParam(fontName->copy(), displayFontT1);  
+          dfp->t1.fileName = new GooString((char*)s);
+        }
+        else
+          continue;
+        font->dfp = dfp;
+        break;
       }
-      else if (!strncasecmp(ext,".pfa",4) || !strncasecmp(ext,".pfb",4)) 
-      {
-        dfp = new DisplayFontParam(fontName->copy(), displayFontT1);  
-        dfp->t1.fileName = new GooString((char*)s);
+      if (lb != NULL) {
+        FcLangSetDestroy(lb);
+        lb = NULL;
+      } else {
+        /* scan all fonts of the list */
+        break;
       }
-      else
-        continue;
-      font->dfp = dfp;
-      break;
     }
     FcFontSetDestroy(set);
   }
@@ -1169,6 +1281,9 @@ fin:
   unlockGlobalParams;
   return dfp;
 }
+#endif
+#if WITH_FONTCONFIGURATION_WIN32
+#include "GlobalParamsWin.cc"
 #endif
 
 GBool GlobalParams::getPSExpandSmaller() {
@@ -1317,6 +1432,15 @@ GBool GlobalParams::getPSASCIIHex() {
   ah = psASCIIHex;
   unlockGlobalParams;
   return ah;
+}
+
+GBool GlobalParams::getPSBinary() {
+  GBool binary;
+
+  lockGlobalParams;
+  binary = psBinary;
+  unlockGlobalParams;
+  return binary;
 }
 
 GooString *GlobalParams::getTextEncodingName() {
@@ -1512,6 +1636,14 @@ GBool GlobalParams::getErrQuiet() {
   return errQuiet;
 }
 
+double GlobalParams::getSplashResolution() {
+  double r;
+  lockGlobalParams;
+  r = splashResolution;
+  unlockGlobalParams;
+  return r;
+}
+
 CharCodeToUnicode *GlobalParams::getCIDToUnicode(GooString *collection) {
   GooString *fileName;
   CharCodeToUnicode *ctu;
@@ -1676,6 +1808,12 @@ void GlobalParams::setPSASCIIHex(GBool hex) {
   unlockGlobalParams;
 }
 
+void GlobalParams::setPSBinary(GBool binary) {
+  lockGlobalParams;
+  psBinary = binary;
+  unlockGlobalParams;
+}
+
 void GlobalParams::setTextEncoding(char *encodingName) {
   lockGlobalParams;
   delete textEncoding;
@@ -1815,6 +1953,12 @@ void GlobalParams::setProfileCommands(GBool profileCommandsA) {
 void GlobalParams::setErrQuiet(GBool errQuietA) {
   lockGlobalParams;
   errQuiet = errQuietA;
+  unlockGlobalParams;
+}
+
+void GlobalParams::setSplashResolution(double SplashResolutionA) {
+  lockGlobalParams;
+  splashResolution = SplashResolutionA;
   unlockGlobalParams;
 }
 

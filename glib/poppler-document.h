@@ -28,6 +28,18 @@ G_BEGIN_DECLS
 #define POPPLER_DOCUMENT(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), POPPLER_TYPE_DOCUMENT, PopplerDocument))
 #define POPPLER_IS_DOCUMENT(obj)          (G_TYPE_CHECK_INSTANCE_TYPE ((obj), POPPLER_TYPE_DOCUMENT))
 
+/**
+ * PopplerPageLayout:
+ * @POPPLER_PAGE_LAYOUT_UNSET: no specific layout set
+ * @POPPLER_PAGE_LAYOUT_SINGLE_PAGE: one page at a time
+ * @POPPLER_PAGE_LAYOUT_ONE_COLUMN: pages in one column
+ * @POPPLER_PAGE_LAYOUT_TWO_COLUMN_LEFT: pages in two columns with odd numbered pages on the left
+ * @POPPLER_PAGE_LAYOUT_TWO_COLUMN_RIGHT: pages in two columns with odd numbered pages on the right
+ * @POPPLER_PAGE_LAYOUT_TWO_PAGE_LEFT: two pages at a time with odd numbered pages on the left
+ * @POPPLER_PAGE_LAYOUT_TWO_PAGE_RIGHT: two pages at a time with odd numbered pages on the right
+ *
+ * Page layout types
+ */
 typedef enum
 {
   POPPLER_PAGE_LAYOUT_UNSET,
@@ -39,6 +51,18 @@ typedef enum
   POPPLER_PAGE_LAYOUT_TWO_PAGE_RIGHT
 } PopplerPageLayout;
 
+/**
+ * PopplerPageMode:
+ * @POPPLER_PAGE_MODE_UNSET: no specific mode set
+ * @POPPLER_PAGE_MODE_NONE: neither document outline nor thumbnails visible
+ * @POPPLER_PAGE_MODE_USE_OUTLINES: document outline visible
+ * @POPPLER_PAGE_MODE_USE_THUMBS: thumbnails visible
+ * @POPPLER_PAGE_MODE_FULL_SCREEN: full-screen mode
+ * @POPPLER_PAGE_MODE_USE_OC: layers panel visible
+ * @POPPLER_PAGE_MODE_USE_ATTACHMENTS: attachments panel visible
+ *
+ * Page modes
+ */
 typedef enum
 {
   POPPLER_PAGE_MODE_UNSET,
@@ -50,6 +74,23 @@ typedef enum
   POPPLER_PAGE_MODE_USE_ATTACHMENTS
 } PopplerPageMode;
 
+/**
+ * PopplerFontType:
+ * @POPPLER_FONT_TYPE_UNKNOWN: unknown font type
+ * @POPPLER_FONT_TYPE_TYPE1: Type 1 font type
+ * @POPPLER_FONT_TYPE_TYPE1C: Type 1 font type embedded in Compact Font Format (CFF) font program
+ * @POPPLER_FONT_TYPE_TYPE1COT: Type 1 font type embedded in OpenType font program
+ * @POPPLER_FONT_TYPE_TYPE3: A font type that is defined with PDF graphics operators
+ * @POPPLER_FONT_TYPE_TRUETYPE: TrueType font type
+ * @POPPLER_FONT_TYPE_TRUETYPEOT: TrueType font type embedded in OpenType font program
+ * @POPPLER_FONT_TYPE_CID_TYPE0: CIDFont type based on Type 1 font technology
+ * @POPPLER_FONT_TYPE_CID_TYPE0C: CIDFont type based on Type 1 font technology embedded in CFF font program
+ * @POPPLER_FONT_TYPE_CID_TYPE0COT: CIDFont type based on Type 1 font technology embedded in OpenType font program
+ * @POPPLER_FONT_TYPE_CID_TYPE2: CIDFont type based on TrueType font technology
+ * @POPPLER_FONT_TYPE_CID_TYPE2OT: CIDFont type based on TrueType font technology embedded in OpenType font program
+ *
+ * Font types
+ */
 typedef enum
 {
   POPPLER_FONT_TYPE_UNKNOWN,
@@ -66,6 +107,19 @@ typedef enum
   POPPLER_FONT_TYPE_CID_TYPE2OT
 } PopplerFontType;
 
+/**
+ * PopplerViewerPreferences:
+ * @POPPLER_VIEWER_PREFERENCES_UNSET: no preferences set
+ * @POPPLER_VIEWER_PREFERENCES_HIDE_TOOLBAR: hider toolbars when document is active
+ * @POPPLER_VIEWER_PREFERENCES_HIDE_MENUBAR: hide menu bar when document is active
+ * @POPPLER_VIEWER_PREFERENCES_HIDE_WINDOWUI: hide UI elements in document's window
+ * @POPPLER_VIEWER_PREFERENCES_FIT_WINDOW: resize document's window to fit the size of the first displayed page
+ * @POPPLER_VIEWER_PREFERENCES_CENTER_WINDOW: position the document's window in the center of the screen
+ * @POPPLER_VIEWER_PREFERENCES_DISPLAY_DOC_TITLE: display document title in window's title bar
+ * @POPPLER_VIEWER_PREFERENCES_DIRECTION_RTL: the predominant reading order for text is right to left
+ *
+ * Viewer preferences
+ */
 typedef enum /*< flags >*/
 {
   POPPLER_VIEWER_PREFERENCES_UNSET = 0,
@@ -78,6 +132,22 @@ typedef enum /*< flags >*/
   POPPLER_VIEWER_PREFERENCES_DIRECTION_RTL = 1 << 6
 } PopplerViewerPreferences;
 
+/**
+ * PopplerPermissions:
+ * @POPPLER_PERMISSIONS_OK_TO_PRINT: document can be printer
+ * @POPPLER_PERMISSIONS_OK_TO_MODIFY: document contents can be modified
+ * @POPPLER_PERMISSIONS_OK_TO_COPY: document can be copied
+ * @POPPLER_PERMISSIONS_OK_TO_ADD_NOTES: annotations can added to the document
+ * @POPPLER_PERMISSIONS_OK_TO_FILL_FORM: interactive form fields can be filled in
+ * @POPPLER_PERMISSIONS_OK_TO_EXTRACT_CONTENTS: extract text and graphics
+ * (in support of accessibility to users with disabilities or for other purposes). Since 0.18
+ * @POPPLER_PERMISSIONS_OK_TO_ASSEMBLE: assemble the document (insert, rotate, or delete pages and create
+ * bookmarks or thumbnail images). Since 0.18
+ * @POPPLER_PERMISSIONS_OK_TO_PRINT_HIGH_RESOLUTION: document can be printer at high resolution. Since 0.18
+ * @POPPLER_PERMISSIONS_FULL: document permits all operations
+ *
+ * Permissions
+ */
 typedef enum /*< flags >*/
 {
   POPPLER_PERMISSIONS_OK_TO_PRINT = 1 << 0,
@@ -85,42 +155,67 @@ typedef enum /*< flags >*/
   POPPLER_PERMISSIONS_OK_TO_COPY = 1 << 2,
   POPPLER_PERMISSIONS_OK_TO_ADD_NOTES = 1 << 3,
   POPPLER_PERMISSIONS_OK_TO_FILL_FORM = 1 << 4,
-  POPPLER_PERMISSIONS_FULL = (POPPLER_PERMISSIONS_OK_TO_PRINT | POPPLER_PERMISSIONS_OK_TO_MODIFY | POPPLER_PERMISSIONS_OK_TO_COPY | POPPLER_PERMISSIONS_OK_TO_ADD_NOTES | POPPLER_PERMISSIONS_OK_TO_FILL_FORM)
+  POPPLER_PERMISSIONS_OK_TO_EXTRACT_CONTENTS = 1 << 5,
+  POPPLER_PERMISSIONS_OK_TO_ASSEMBLE = 1 << 6,
+  POPPLER_PERMISSIONS_OK_TO_PRINT_HIGH_RESOLUTION = 1 << 7,
+  POPPLER_PERMISSIONS_FULL = (POPPLER_PERMISSIONS_OK_TO_PRINT | POPPLER_PERMISSIONS_OK_TO_MODIFY | POPPLER_PERMISSIONS_OK_TO_COPY | POPPLER_PERMISSIONS_OK_TO_ADD_NOTES | POPPLER_PERMISSIONS_OK_TO_FILL_FORM | POPPLER_PERMISSIONS_OK_TO_EXTRACT_CONTENTS | POPPLER_PERMISSIONS_OK_TO_ASSEMBLE | POPPLER_PERMISSIONS_OK_TO_PRINT_HIGH_RESOLUTION)
 
 } PopplerPermissions;
 
 
 
-GType            poppler_document_get_type          (void) G_GNUC_CONST;
-PopplerDocument *poppler_document_new_from_file     (const char       *uri,
-						     const char       *password,
-						     GError          **error);
-PopplerDocument *poppler_document_new_from_data     (char             *data,
-						     int               length,
-						     const char       *password,
-						     GError          **error);
-gboolean         poppler_document_save              (PopplerDocument  *document,
-						     const char       *uri,
-						     GError          **error);
-gboolean         poppler_document_save_a_copy       (PopplerDocument  *document,
-						     const char       *uri,
-						     GError          **error);
-int              poppler_document_get_n_pages       (PopplerDocument  *document);
-PopplerPage     *poppler_document_get_page          (PopplerDocument  *document,
-						     int               index);
-PopplerPage     *poppler_document_get_page_by_label (PopplerDocument  *document,
-						     const char       *label);
+GType              poppler_document_get_type               (void) G_GNUC_CONST;
+PopplerDocument   *poppler_document_new_from_file          (const char      *uri,
+							    const char      *password,
+							    GError         **error);
+PopplerDocument   *poppler_document_new_from_data          (char            *data,
+							    int              length,
+							    const char      *password,
+							    GError         **error);
+gboolean           poppler_document_save                   (PopplerDocument *document,
+							    const char      *uri,
+							    GError         **error);
+gboolean           poppler_document_save_a_copy            (PopplerDocument *document,
+							    const char      *uri,
+							    GError         **error);
+gboolean           poppler_document_get_id                 (PopplerDocument *document,
+							    gchar          **permanent_id,
+							    gchar          **update_id);
+int                poppler_document_get_n_pages            (PopplerDocument *document);
+PopplerPage       *poppler_document_get_page               (PopplerDocument *document,
+							    int              index);
+PopplerPage       *poppler_document_get_page_by_label      (PopplerDocument *document,
+							    const char      *label);
+gchar             *poppler_document_get_pdf_version_string (PopplerDocument *document);
+void               poppler_document_get_pdf_version        (PopplerDocument *document,
+							    guint           *major_version,
+							    guint           *minor_version);
+gchar             *poppler_document_get_title              (PopplerDocument *document);
+gchar             *poppler_document_get_author             (PopplerDocument *document);
+gchar             *poppler_document_get_subject            (PopplerDocument *document);
+gchar             *poppler_document_get_keywords           (PopplerDocument *document);
+gchar             *poppler_document_get_creator            (PopplerDocument *document);
+gchar             *poppler_document_get_producer           (PopplerDocument *document);
+time_t             poppler_document_get_creation_date      (PopplerDocument *document);
+time_t             poppler_document_get_modification_date  (PopplerDocument *document);
+gboolean           poppler_document_is_linearized          (PopplerDocument *document);
+PopplerPageLayout  poppler_document_get_page_layout        (PopplerDocument *document);
+PopplerPageMode    poppler_document_get_page_mode          (PopplerDocument *document);
+PopplerPermissions poppler_document_get_permissions        (PopplerDocument *document);
+gchar             *poppler_document_get_metadata           (PopplerDocument *document);
+
 /* Attachments */
-gboolean         poppler_document_has_attachments   (PopplerDocument  *document);
-GList           *poppler_document_get_attachments   (PopplerDocument  *document);
+guint              poppler_document_get_n_attachments      (PopplerDocument  *document);
+gboolean           poppler_document_has_attachments        (PopplerDocument  *document);
+GList             *poppler_document_get_attachments        (PopplerDocument  *document);
 
 /* Links */
-PopplerDest     *poppler_document_find_dest         (PopplerDocument  *document,
-						     const gchar      *link_name);
+PopplerDest       *poppler_document_find_dest              (PopplerDocument  *document,
+							    const gchar      *link_name);
 
 /* Form */
-PopplerFormField *poppler_document_get_form_field   (PopplerDocument  *document,
-						     gint              id);
+PopplerFormField  *poppler_document_get_form_field         (PopplerDocument  *document,
+							    gint              id);
 
 /* Interface for getting the Index of a poppler_document */
 #define POPPLER_TYPE_INDEX_ITER                 (poppler_index_iter_get_type ())

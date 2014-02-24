@@ -14,11 +14,15 @@
 // under GPL version 2 or later
 //
 // Copyright (C) 2005 Jeff Muizelaar <jeff@infidigm.net>
-// Copyright (C) 2006-2009 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2006-2010 Albert Astals Cid <aacid@kde.org>
 // Copyright (C) 2007 Krzysztof Kowalczyk <kkowalczyk@gmail.com>
 // Copyright (C) 2008 Julien Rebetez <julien@fhtagn.net>
 // Copyright (C) 2009 Carlos Garcia Campos <carlosgc@gnome.org>
 // Copyright (C) 2009 Glenn Ganz <glenn.ganz@uptime.ch>
+// Copyright (C) 2009 Stefan Thomas <thomas@eload24.com>
+// Copyright (C) 2010 Hib Eris <hib@hiberis.nl>
+// Copyright (C) 2010 Tomas Hoger <thoger@redhat.com>
+// Copyright (C) 2011 William Bader <williambader@hotmail.com>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -50,6 +54,7 @@
 #include "Stream.h"
 #include "JBIG2Stream.h"
 #include "Stream-CCITT.h"
+#include "CachedFile.h"
 
 #ifdef ENABLE_LIBJPEG
 #include "DCTStream.h"
@@ -94,6 +99,15 @@ void Stream::close() {
 int Stream::getRawChar() {
   error(-1, "Internal: called getRawChar() on non-predictor stream");
   return EOF;
+}
+
+int Stream::getChars(int nChars, Guchar *buffer) {
+  error(-1, "Internal: called getChars() on non-predictor stream");
+  return 0;
+}
+
+void Stream::getRawChars(int nChars, int *buffer) {
+  error(-1, "Internal: called getRawChars() on non-predictor stream");
 }
 
 char *Stream::getLine(char *buf, int size) {
@@ -360,8 +374,9 @@ void FileOutStream::printf(const char *format, ...)
 // BaseStream
 //------------------------------------------------------------------------
 
-BaseStream::BaseStream(Object *dictA) {
+BaseStream::BaseStream(Object *dictA, Guint lengthA) {
   dict = *dictA;
+  length = lengthA;
 }
 
 BaseStream::~BaseStream() {
@@ -458,9 +473,8 @@ Guchar *ImageStream::getLine() {
     }
   } else if (nBits == 8) {
     Guchar *line = imgLine;
-    for (i = 0; i < nVals; ++i) {
-      *line++ = str->getChar();
-    }
+    int readChars = str->doGetChars(nVals, line);
+    for ( ; readChars < nVals; readChars++) line[readChars] = EOF;
   } else if (nBits == 16) {
     // this is a hack to support 16 bits images, everywhere
     // we assume a component fits in 8 bits, with this hack
@@ -540,12 +554,17 @@ int StreamPredictor::lookChar() {
 }
 
 int StreamPredictor::getChar() {
-  if (predIdx >= rowBytes) {
-    if (!getNextLine()) {
-      return EOF;
-    }
+  return doGetChar();
+}
+
+int StreamPredictor::getChars(int nChars, Guchar *buffer)
+{
+  for (int i = 0; i < nChars; ++i) {
+    const int c = doGetChar();
+    if (likely(c != EOF)) buffer[i] = c;
+    else return i;
   }
-  return predLine[predIdx++];
+  return nChars;
 }
 
 GBool StreamPredictor::getNextLine() {
@@ -568,19 +587,22 @@ GBool StreamPredictor::getNextLine() {
   }
 
   // read the raw line, apply PNG (byte) predictor
+  int *rawCharLine = new int[rowBytes - pixBytes];
+  str->getRawChars(rowBytes - pixBytes, rawCharLine);
   memset(upLeftBuf, 0, pixBytes + 1);
   for (i = pixBytes; i < rowBytes; ++i) {
     for (j = pixBytes; j > 0; --j) {
       upLeftBuf[j] = upLeftBuf[j-1];
     }
     upLeftBuf[0] = predLine[i];
-    if ((c = str->getRawChar()) == EOF) {
+    if ((c = rawCharLine[i - pixBytes]) == EOF) {
       if (i > pixBytes) {
 	// this ought to return false, but some (broken) PDF files
 	// contain truncated image data, and Adobe apparently reads the
 	// last partial line
 	break;
       }
+      delete[] rawCharLine;
       return gFalse;
     }
     switch (curPred) {
@@ -618,6 +640,7 @@ GBool StreamPredictor::getNextLine() {
       break;
     }
   }
+  delete[] rawCharLine;
 
   // apply TIFF (component) predictor
   if (predictor == 2) {
@@ -674,7 +697,7 @@ GBool StreamPredictor::getNextLine() {
 
 FileStream::FileStream(FILE *fA, Guint startA, GBool limitedA,
 		       Guint lengthA, Object *dictA):
-    BaseStream(dictA) {
+    BaseStream(dictA, lengthA) {
   f = fA;
   start = startA;
   limited = limitedA;
@@ -794,11 +817,110 @@ void FileStream::moveStart(int delta) {
 }
 
 //------------------------------------------------------------------------
+// CachedFileStream
+//------------------------------------------------------------------------
+
+CachedFileStream::CachedFileStream(CachedFile *ccA, Guint startA,
+        GBool limitedA, Guint lengthA, Object *dictA)
+  : BaseStream(dictA, lengthA)
+{
+  cc = ccA;
+  start = startA;
+  limited = limitedA;
+  length = lengthA;
+  bufPtr = bufEnd = buf;
+  bufPos = start;
+  savePos = 0;
+  saved = gFalse;
+}
+
+CachedFileStream::~CachedFileStream()
+{
+  close();
+  cc->decRefCnt();
+}
+
+Stream *CachedFileStream::makeSubStream(Guint startA, GBool limitedA,
+        Guint lengthA, Object *dictA)
+{
+  cc->incRefCnt();
+  return new CachedFileStream(cc, startA, limitedA, lengthA, dictA);
+}
+
+void CachedFileStream::reset()
+{
+  savePos = (Guint)cc->tell();
+  cc->seek(start, SEEK_SET);
+
+  saved = gTrue;
+  bufPtr = bufEnd = buf;
+  bufPos = start;
+}
+
+void CachedFileStream::close()
+{
+  if (saved) {
+    cc->seek(savePos, SEEK_SET);
+    saved = gFalse;
+  }
+}
+
+GBool CachedFileStream::fillBuf()
+{
+  int n;
+
+  bufPos += bufEnd - buf;
+  bufPtr = bufEnd = buf;
+  if (limited && bufPos >= start + length) {
+    return gFalse;
+  }
+  if (limited && bufPos + cachedStreamBufSize > start + length) {
+    n = start + length - bufPos;
+  } else {
+    n = cachedStreamBufSize - (bufPos % cachedStreamBufSize);
+  }
+  cc->read(buf, 1, n);
+  bufEnd = buf + n;
+  if (bufPtr >= bufEnd) {
+    return gFalse;
+  }
+  return gTrue;
+}
+
+void CachedFileStream::setPos(Guint pos, int dir)
+{
+  Guint size;
+
+  if (dir >= 0) {
+    cc->seek(pos, SEEK_SET);
+    bufPos = pos;
+  } else {
+    cc->seek(0, SEEK_END);
+    size = (Guint)cc->tell();
+
+    if (pos > size)
+      pos = (Guint)size;
+
+    cc->seek(-(int)pos, SEEK_END);
+    bufPos = (Guint)cc->tell();
+  }
+
+  bufPtr = bufEnd = buf;
+}
+
+void CachedFileStream::moveStart(int delta)
+{
+  start += delta;
+  bufPtr = bufEnd = buf;
+  bufPos = start;
+}
+
+//------------------------------------------------------------------------
 // MemStream
 //------------------------------------------------------------------------
 
 MemStream::MemStream(char *bufA, Guint startA, Guint lengthA, Object *dictA):
-    BaseStream(dictA) {
+    BaseStream(dictA, lengthA) {
   buf = bufA;
   start = startA;
   length = lengthA;
@@ -862,7 +984,7 @@ void MemStream::moveStart(int delta) {
 
 EmbedStream::EmbedStream(Stream *strA, Object *dictA,
 			 GBool limitedA, Guint lengthA):
-    BaseStream(dictA) {
+    BaseStream(dictA, lengthA) {
   str = strA;
   limited = limitedA;
   length = lengthA;
@@ -1135,16 +1257,13 @@ int LZWStream::lookChar() {
   return seqBuf[seqIndex];
 }
 
+void LZWStream::getRawChars(int nChars, int *buffer) {
+  for (int i = 0; i < nChars; ++i)
+    buffer[i] = doGetRawChar();
+}
+
 int LZWStream::getRawChar() {
-  if (eof) {
-    return EOF;
-  }
-  if (seqIndex >= seqLength) {
-    if (!processNextCode()) {
-      return EOF;
-    }
-  }
-  return seqBuf[seqIndex++];
+  return doGetRawChar();
 }
 
 void LZWStream::reset() {
@@ -3182,6 +3301,8 @@ GBool DCTStream::readScanInfo() {
   interleaved = scanInfo.numComps == numComps;
   for (j = 0; j < numComps; ++j) {
     scanInfo.comp[j] = gFalse;
+    scanInfo.dcHuffTable[j] = 0;
+    scanInfo.acHuffTable[j] = 0;
   }
   for (i = 0; i < scanInfo.numComps; ++i) {
     id = str->getChar();
@@ -4129,20 +4250,20 @@ void FlateStream::reset() {
 }
 
 int FlateStream::getChar() {
-  int c;
+  return doGetChar();
+}
 
+int FlateStream::getChars(int nChars, Guchar *buffer) {
   if (pred) {
-    return pred->getChar();
+    return pred->getChars(nChars, buffer);
+  } else {
+    for (int i = 0; i < nChars; ++i) {
+      const int c = doGetChar();
+      if (likely(c != EOF)) buffer[i] = c;
+      else return i;
+    }
+    return nChars;
   }
-  while (remain == 0) {
-    if (endOfBlock && eof)
-      return EOF;
-    readSome();
-  }
-  c = buf[index];
-  index = (index + 1) & flateMask;
-  --remain;
-  return c;
 }
 
 int FlateStream::lookChar() {
@@ -4160,18 +4281,13 @@ int FlateStream::lookChar() {
   return c;
 }
 
-int FlateStream::getRawChar() {
-  int c;
+void FlateStream::getRawChars(int nChars, int *buffer) {
+  for (int i = 0; i < nChars; ++i)
+    buffer[i] = doGetRawChar();
+}
 
-  while (remain == 0) {
-    if (endOfBlock && eof)
-      return EOF;
-    readSome();
-  }
-  c = buf[index];
-  index = (index + 1) & flateMask;
-  --remain;
-  return c;
+int FlateStream::getRawChar() {
+  return doGetRawChar();
 }
 
 GooString *FlateStream::getPSFilter(int psLevel, char *indent) {
@@ -4806,5 +4922,48 @@ GBool RunLengthEncoder::fillBuf() {
     }
   }
   bufPtr = buf;
+  return gTrue;
+}
+
+//------------------------------------------------------------------------
+// CMKYGrayEncoder
+//------------------------------------------------------------------------
+
+CMKYGrayEncoder::CMKYGrayEncoder(Stream *strA):
+    FilterStream(strA) {
+  bufPtr = bufEnd = buf;
+  eof = gFalse;
+}
+
+CMKYGrayEncoder::~CMKYGrayEncoder() {
+  if (str->isEncoder())
+    delete str;
+}
+
+void CMKYGrayEncoder::reset() {
+  str->reset();
+  bufPtr = bufEnd = buf;
+  eof = gFalse;
+}
+
+GBool CMKYGrayEncoder::fillBuf() {
+  int c0, c1, c2, c3;
+  int i;
+
+  if (eof) {
+    return gFalse;
+  }
+  c0 = str->getChar();
+  c1 = str->getChar();
+  c2 = str->getChar();
+  c3 = str->getChar();
+  if (c3 == EOF) {
+    eof = gTrue;
+    return gFalse;
+  }
+  i = (3 * c0 + 6 * c1 + c2) / 10 + c3;
+  if (i > 255) i = 255;
+  bufPtr = bufEnd = buf;
+  *bufEnd++ = (char) i;
   return gTrue;
 }

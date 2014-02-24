@@ -2,38 +2,37 @@
 #define __POPPLER_PRIVATE_H__
 
 #include <config.h>
+
+#ifndef __GI_SCANNER__
 #include <PDFDoc.h>
 #include <PSOutputDev.h>
 #include <Link.h>
+#include <Movie.h>
+#include <Rendition.h>
 #include <Form.h>
 #include <Gfx.h>
 #include <FontInfo.h>
 #include <TextOutputDev.h>
 #include <Catalog.h>
 #include <OptionalContent.h>
-
-#if defined (HAVE_CAIRO)
 #include <CairoOutputDev.h>
-#elif defined (HAVE_SPLASH)
-#include <SplashOutputDev.h>
+#include <FileSpec.h>
 #endif
 
 struct _PopplerDocument
 {
+  /*< private >*/
   GObject parent_instance;
   PDFDoc *doc;
 
   GList *layers;
   GList *layers_rbgroups;
-#if defined (HAVE_CAIRO)
   CairoOutputDev *output_dev;
-#elif defined (HAVE_SPLASH)
-  SplashOutputDev *output_dev;
-#endif
 };
 
 struct _PopplerPSFile
 {
+  /*< private >*/
   GObject parent_instance;
 
   PopplerDocument *document;
@@ -48,6 +47,7 @@ struct _PopplerPSFile
 
 struct _PopplerFontInfo
 {
+  /*< private >*/
   GObject parent_instance;
   PopplerDocument *document;
   FontInfoScanner *scanner;
@@ -55,27 +55,31 @@ struct _PopplerFontInfo
 
 struct _PopplerPage
 {
+  /*< private >*/
   GObject parent_instance;
   PopplerDocument *document;
   Page *page;
   int index;
-#if defined (HAVE_CAIRO)
   TextPage *text;
-#else
-  TextOutputDev *text_dev;
-  Gfx *gfx;
-#endif
-  Annots *annots;
 };
 
 struct _PopplerFormField
 {
+  /*< private >*/
   GObject parent_instance;
   PopplerDocument *document;
   FormWidget *widget;
+  PopplerAction *action;
+};
+
+struct _PopplerAnnot
+{
+  GObject  parent_instance;
+  Annot   *annot;
 };
 
 typedef struct _Layer {
+  /*< private >*/
   GList *kids;
   gchar *label;
   OptionalContentGroup *oc;
@@ -83,6 +87,7 @@ typedef struct _Layer {
 
 struct _PopplerLayer
 {
+  /*< private >*/
   GObject parent_instance;
   PopplerDocument *document;
   Layer *layer;
@@ -90,6 +95,9 @@ struct _PopplerLayer
   gchar *title;
 };
 
+GList         *_poppler_document_get_layers (PopplerDocument *document);
+GList         *_poppler_document_get_layer_rbgroup (PopplerDocument *document,
+						    Layer           *layer);
 PopplerPage   *_poppler_page_new   (PopplerDocument *document,
 				    Page            *page,
 				    int              index);
@@ -103,11 +111,15 @@ PopplerDest   *_poppler_dest_new_goto (PopplerDocument *document,
 				       LinkDest        *link_dest);
 PopplerFormField *_poppler_form_field_new (PopplerDocument *document,
 					   FormWidget      *field);
-PopplerAttachment *_poppler_attachment_new (PopplerDocument *document,
-					    EmbFile         *file);
+PopplerAttachment *_poppler_attachment_new (FileSpec *file);
+PopplerMovie      *_poppler_movie_new (Movie *movie);
+PopplerMedia      *_poppler_media_new (MediaRendition *media);
 PopplerAnnot      *_poppler_annot_new           (Annot *annot);
 PopplerAnnot      *_poppler_annot_text_new      (Annot *annot);
 PopplerAnnot      *_poppler_annot_free_text_new (Annot *annot);
+PopplerAnnot      *_poppler_annot_file_attachment_new (Annot *annot);
+PopplerAnnot      *_poppler_annot_movie_new (Annot *annot);
+PopplerAnnot      *_poppler_annot_screen_new (Annot *annot);
 
 char *_poppler_goo_string_to_utf8(GooString *s);
 gboolean _poppler_convert_pdf_date_to_gtime (GooString *date,

@@ -13,11 +13,13 @@
 // All changes made under the Poppler project to this file are licensed
 // under GPL version 2 or later
 //
-// Copyright (C) 2006, 2008, 2009 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2006, 2008-2010 Albert Astals Cid <aacid@kde.org>
 // Copyright (C) 2007 Julien Rebetez <julienr@svn.gnome.org>
 // Copyright (C) 2007 Koji Otani <sho@bbr.jp>
 // Copyright (C) 2008 Michael Vrable <mvrable@cs.ucsd.edu>
 // Copyright (C) 2008 Vasile Gaburici <gaburici@cs.umd.edu>
+// Copyright (C) 2010 William Bader <williambader@hotmail.com>
+// Copyright (C) 2010 Jakub Wilk <ubanus@users.sf.net>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -34,6 +36,7 @@
 #include <string.h>
 #include "goo/gmem.h"
 #include "goo/gfile.h"
+#include "goo/GooLikely.h"
 #include "goo/GooString.h"
 #include "Error.h"
 #include "GlobalParams.h"
@@ -124,6 +127,7 @@ CharCodeToUnicode *CharCodeToUnicode::parseUnicodeToUnicode(
   Unicode *uBuf = (Unicode *)gmallocn(uBufSize, sizeof(Unicode));
   CharCodeToUnicode *ctu;
   int line, n, i;
+  char *tokptr;
 
   if (!(f = fopen(fileName->getCString(), "r"))) {
     gfree(uBuf);
@@ -142,14 +146,14 @@ CharCodeToUnicode *CharCodeToUnicode::parseUnicodeToUnicode(
   line = 0;
   while (getLine(buf, sizeof(buf), f)) {
     ++line;
-    if (!(tok = strtok(buf, " \t\r\n")) ||
+    if (!(tok = strtok_r(buf, " \t\r\n", &tokptr)) ||
 	sscanf(tok, "%x", &u0) != 1) {
       error(-1, "Bad line (%d) in unicodeToUnicode file '%s'",
 	    line, fileName->getCString());
       continue;
     }
     n = 0;
-    while ((tok = strtok(NULL, " \t\r\n"))) {
+    while ((tok = strtok_r(NULL, " \t\r\n", &tokptr))) {
       if (n >= uBufSize)
       {
         uBufSize += 8;
@@ -307,8 +311,10 @@ void CharCodeToUnicode::parseCMap1(int (*getCharFunc)(void *), void *data,
 	  error(-1, "Illegal entry in bfrange block in ToUnicode CMap");
 	  break;
 	}
-	if (!(n1 == 2 + nDigits && tok1[0] == '<' && tok1[n1 - 1] == '>' &&
-	      n2 == 2 + nDigits && tok2[0] == '<' && tok2[n2 - 1] == '>')) {
+	if (!(((n1 == 2 + nDigits && tok1[0] == '<' && tok1[n1 - 1] == '>') ||
+	       (n1 == 4 + nDigits && tok1[0] == '<' && tok1[n1 - 1] == '>' && tok1[1] == '0' && tok1[2] == '0')) &&
+	      ((n2 == 2 + nDigits && tok2[0] == '<' && tok2[n2 - 1] == '>') ||
+	       (n2 == 4 + nDigits && tok2[0] == '<' && tok2[n2 - 1] == '>' && tok1[1] == '0' && tok1[2] == '0')))) {
 	  error(-1, "Illegal entry in bfrange block in ToUnicode CMap");
 	  continue;
 	}
@@ -361,10 +367,15 @@ void CharCodeToUnicode::addMapping(CharCode code, char *uStr, int n,
   if (code >= mapLen) {
     oldLen = mapLen;
     mapLen = (code + 256) & ~255;
-    map = (Unicode *)greallocn(map, mapLen, sizeof(Unicode));
-    for (i = oldLen; i < mapLen; ++i) {
-      map[i] = 0;
-    }
+    if (unlikely(code >= mapLen)) {
+      error(-1, "Illegal code value in CharCodeToUnicode::addMapping");
+      return;
+    } else {
+      map = (Unicode *)greallocn(map, mapLen, sizeof(Unicode));
+      for (i = oldLen; i < mapLen; ++i) {
+        map[i] = 0;
+      }
+	}
   }
   if (n <= 4) {
     if (sscanf(uStr, "%x", &u) != 1) {

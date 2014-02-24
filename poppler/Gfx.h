@@ -16,9 +16,11 @@
 // Copyright (C) 2005 Jonathan Blandford <jrb@redhat.com>
 // Copyright (C) 2007 Iñigo Martínez <inigomartinez@gmail.com>
 // Copyright (C) 2008 Brad Hards <bradh@kde.org>
-// Copyright (C) 2008 Carlos Garcia Campos <carlosgc@gnome.org>
-// Copyright (C) 2009 Albert Astals Cid <aacid@kde.org>
-// Copyright (C) 2009 Thomas Freitag <Thomas.Freitag@alfa.de>
+// Copyright (C) 2008, 2010 Carlos Garcia Campos <carlosgc@gnome.org>
+// Copyright (C) 2009-2011 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2009, 2010 Thomas Freitag <Thomas.Freitag@alfa.de>
+// Copyright (C) 2010 David Benjamin <davidben@mit.edu>
+// Copyright (C) 2010 Christian Feuersänger <cfeuersaenger@googlemail.com>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -32,11 +34,14 @@
 #pragma interface
 #endif
 
+#include "poppler-config.h"
 #include "goo/gtypes.h"
 #include "goo/GooList.h"
 #include "GfxState.h"
 #include "Object.h"
 #include "PopplerCache.h"
+
+#include <vector>
 
 class GooString;
 class XRef;
@@ -113,6 +118,7 @@ public:
   GfxPattern *lookupPattern(char *name, Gfx *gfx);
   GfxShading *lookupShading(char *name, Gfx *gfx);
   GBool lookupGState(char *name, Object *obj);
+  GBool lookupGStateNF(char *name, Object *obj);
 
   GfxResources *getNext() { return next; }
 
@@ -124,6 +130,7 @@ private:
   Object patternDict;
   Object shadingDict;
   Object gStateDict;
+  PopplerObjectCache gStateCache;
   Object propertiesDict;
   GfxResources *next;
 };
@@ -161,8 +168,14 @@ public:
   // Save graphics state.
   void saveState();
 
+  // Push a new state guard
+  void pushStateGuard();
+
   // Restore graphics state.
   void restoreState();
+
+  // Pop to state guard and pop guard
+  void popStateGuard();
 
   // Get the current graphics state object.
   GfxState *getState() { return state; }
@@ -185,12 +198,13 @@ private:
   GBool textHaveCSPattern;	// in text drawing and text has pattern colorspace
   GBool drawText;		// in text drawing
   GBool maskHaveCSPattern;	// in mask drawing and mask has pattern colorspace
-  GfxColorSpace *colorSpaceText;// colorspace after text has filled with pattern
-  GfxColor colorText;		// fill color after after text has filled with pattern
+  GBool commandAborted;         // did the previous command abort the drawing?
   GfxResources *res;		// resource stack
   int updateLevel;
 
   GfxState *state;		// current graphics state
+  int stackHeight;		// the height of the current graphics stack
+  std::vector<int> stateGuards;   // a stack of state limits; to guard against unmatched pops
   GBool fontChanged;		// set if font or text matrix has changed
   GfxClipType clip;		// do a clip?
   int ignoreUndef;		// current BX/EX nesting level
@@ -217,6 +231,8 @@ private:
   Operator *findOp(char *name);
   GBool checkArg(Object *arg, TchkType type);
   int getPos();
+
+  int bottomGuard();
 
   // graphics state operators
   void opSave(Object args[], int numArgs);
@@ -286,9 +302,13 @@ private:
   void gouraudFillTriangle(double x0, double y0, GfxColor *color0,
 			   double x1, double y1, GfxColor *color1,
 			   double x2, double y2, GfxColor *color2,
-			   int nComps, int depth);
+			   int nComps, int depth, GfxState::ReusablePathIterator *path);
+  void gouraudFillTriangle(double x0, double y0, double color0,
+			   double x1, double y1, double color1,
+			   double x2, double y2, double color2,
+			   double refineColorThreshold, int depth, GfxGouraudTriangleShading *shading, GfxState::ReusablePathIterator *path);
   void doPatchMeshShFill(GfxPatchMeshShading *shading);
-  void fillPatch(GfxPatch *patch, int nComps, int depth);
+  void fillPatch(GfxPatch *patch, int colorComps, int patchColorComps, double refineColorThreshold, int depth, GfxPatchMeshShading *shading);
   void doEndPath();
 
   // path clipping operators

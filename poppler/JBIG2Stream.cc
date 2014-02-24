@@ -15,8 +15,9 @@
 //
 // Copyright (C) 2006 Raj Kumar <rkumar@archive.org>
 // Copyright (C) 2006 Paul Walmsley <paul@booyaka.com>
-// Copyright (C) 2006-2009 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2006-2010 Albert Astals Cid <aacid@kde.org>
 // Copyright (C) 2009 David Benjamin <davidben@mit.edu>
+// Copyright (C) 2011 Edward Jiang <ejiang@google.com>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -742,13 +743,18 @@ JBIG2Bitmap *JBIG2Bitmap::getSlice(Guint x, Guint y, Guint wA, Guint hA) {
   Guint xx, yy;
 
   slice = new JBIG2Bitmap(0, wA, hA);
-  slice->clearToZero();
-  for (yy = 0; yy < hA; ++yy) {
-    for (xx = 0; xx < wA; ++xx) {
-      if (getPixel(x + xx, y + yy)) {
-	slice->setPixel(xx, yy);
+  if (slice->isOk()) {
+    slice->clearToZero();
+    for (yy = 0; yy < hA; ++yy) {
+      for (xx = 0; xx < wA; ++xx) {
+        if (getPixel(x + xx, y + yy)) {
+	  slice->setPixel(xx, yy);
+        }
       }
     }
+  } else {
+    delete slice;
+    slice = NULL;
   }
   return slice;
 }
@@ -2283,7 +2289,7 @@ JBIG2Bitmap *JBIG2Stream::readTextRegion(GBool huff, GBool refine,
     s = sFirst;
 
     // read the instances
-    while (1) {
+    while (inst < numInstances) {
 
       // T value
       if (strips == 1) {
@@ -2455,6 +2461,9 @@ void JBIG2Stream::readPatternDictSeg(Guint segNum, Guint length) {
   bitmap = readGenericBitmap(mmr, (grayMax + 1) * patternW, patternH,
 			     templ, gFalse, gFalse, NULL,
 			     atx, aty, length - 7);
+
+  if (!bitmap)
+    return;
 
   // create the pattern dict object
   patternDict = new JBIG2PatternDict(segNum, grayMax + 1);
@@ -3224,8 +3233,12 @@ void JBIG2Stream::readGenericRefinementRegionSeg(Guint segNum, GBool imm,
 
   // store the region bitmap
   } else {
-    bitmap->setSegNum(segNum);
-    segments->append(bitmap);
+    if (bitmap) {
+      bitmap->setSegNum(segNum);
+      segments->append(bitmap);
+    } else {
+      error(curStr->getPos(), "readGenericRefinementRegionSeg with null bitmap");
+    }
   }
 
   // delete the referenced bitmap

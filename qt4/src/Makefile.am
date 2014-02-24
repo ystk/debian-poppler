@@ -1,7 +1,6 @@
 INCLUDES =					\
 	-I$(top_srcdir)				\
 	-I$(top_srcdir)/poppler			\
-	-I$(top_srcdir)/qt			\
 	$(FONTCONFIG_CFLAGS)			\
 	$(POPPLER_QT4_CFLAGS)
 
@@ -16,8 +15,7 @@ poppler_include_HEADERS =			\
 	poppler-form.h				\
 	poppler-optcontent.h			\
 	poppler-export.h			\
-	poppler-page-transition.h		\
-	poppler-page-transition-private.h
+	poppler-page-transition.h
 
 lib_LTLIBRARIES = libpoppler-qt4.la
 
@@ -49,25 +47,26 @@ libpoppler_qt4_la_SOURCES =			\
 	poppler-qiodeviceoutstream-private.h	\
 	poppler-optcontent-private.h		\
 	poppler-export.h			\
-	poppler-private.h
+	poppler-private.h			\
+	poppler-page-transition-private.h	\
+	poppler-embeddedfile-private.h
+
+libpoppler_qt4_la_CXXFLAGS = 			\
+	-Dpoppler_qt4_EXPORTS
 
 libpoppler_qt4_la_LIBADD = 			\
 	$(top_builddir)/poppler/libpoppler.la	\
+	$(top_builddir)/poppler/libpoppler-arthur.la	\
 	$(FONTCONFIG_LIBS)				\
 	$(POPPLER_QT4_LIBS)
 
-if BUILD_SPLASH_OUTPUT
-libpoppler_qt4_la_LIBADD += 			\
-	$(top_builddir)/poppler/libpoppler-arthur.la
-endif
-
-libpoppler_qt4_la_LDFLAGS = -version-info 5:0:2 @create_shared_lib@
+libpoppler_qt4_la_LDFLAGS = -version-info 10:0:7 @create_shared_lib@ @auto_import_flags@
 
 # This rule lets GNU make create any *.moc from the equivalent *.h
 .h.moc:
 	$(AM_V_GEN) $(MOCQT4) -i $< -o $@
 
-poppler-optcontent.lo: poppler-optcontent.moc
+BUILT_SOURCES = poppler-optcontent.moc
 
 clean-generic:
 	rm -f *.moc

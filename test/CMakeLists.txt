@@ -1,12 +1,17 @@
 
 if (ENABLE_SPLASH)
 
-  set (perf_test_SRCS
-    perf-test.cc
-    perf-test-preview-dummy.cc
-  )
-  add_executable(perf-test ${perf_test_SRCS})
-  target_link_libraries(perf-test poppler)
+  if (HAVE_NANOSLEEP OR LIB_RT_HAS_NANOSLEEP)
+    set (perf_test_SRCS
+      perf-test.cc
+      perf-test-preview-dummy.cc
+    )
+    add_executable(perf-test ${perf_test_SRCS})
+    target_link_libraries(perf-test poppler)
+    if (LIB_RT_HAS_NANOSLEEP)
+      target_link_libraries(perf-test rt)
+    endif (LIB_RT_HAS_NANOSLEEP)
+  endif (HAVE_NANOSLEEP OR LIB_RT_HAS_NANOSLEEP)
 
 endif (ENABLE_SPLASH)
 
@@ -20,18 +25,12 @@ if (GTK_FOUND)
   )
 
   set (gtk_splash_test_SRCS
-    gtk-splash-test.cc
+    gtk-test.cc
   )
-  poppler_add_test(gtk-splash-test BUILD_GTK_TESTS ${gtk_splash_test_SRCS})
-  target_link_libraries(gtk-splash-test poppler ${GTK2_LIBRARIES})
+  poppler_add_test(gtk-test BUILD_GTK_TESTS ${gtk_splash_test_SRCS})
+  target_link_libraries(gtk-test poppler-glib ${GTK2_LIBRARIES})
 
   if (HAVE_CAIRO)
-
-    set (gtk_cairo_test_SRCS
-      gtk-cairo-test.cc
-    )
-    poppler_add_test(gtk-cairo-test BUILD_GTK_TESTS ${gtk_cairo_test_SRCS})
-    target_link_libraries(gtk-cairo-test poppler-glib ${GTK2_LIBRARIES})
 
     set (pdf_inspector_SRCS
       pdf-inspector.cc

@@ -4,6 +4,22 @@
 //
 //========================================================================
 
+//========================================================================
+//
+// Modified under the Poppler project - http://poppler.freedesktop.org
+//
+// All changes made under the Poppler project to this file are licensed
+// under GPL version 2 or later
+//
+// Copyright (C) 2010 Paweł Wiejacha <pawel.wiejacha@gmail.com>
+// Copyright (C) 2010, 2011 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2012 Alexander Saprykin <xelfium@gmail.com>
+//
+// To see a description of the changes please see the Changelog file that
+// came with your tarball or type make ChangeLog if you are building from git
+//
+//========================================================================
+
 #include <config.h>
 
 #ifdef USE_GCC_PRAGMAS
@@ -12,6 +28,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <algorithm>
 #include "goo/gmem.h"
 #include "SplashMath.h"
 #include "SplashPath.h"
@@ -62,7 +79,7 @@ SplashXPath::SplashXPath(SplashPath *path, SplashCoord *matrix,
   SplashCoord x0, y0, x1, y1, x2, y2, x3, y3, xsp, ysp;
   SplashCoord adj0, adj1, w;
   int ww;
-  int curSubpath, curSubpathX, i, j;
+  int curSubpath, i, j;
 
   // transform the points
   pts = (SplashXPathPoint *)gmallocn(path->length, sizeof(SplashXPathPoint));
@@ -141,7 +158,6 @@ SplashXPath::SplashXPath(SplashPath *path, SplashCoord *matrix,
   x0 = y0 = xsp = ysp = 0; // make gcc happy
   adj0 = adj1 = 0; // make gcc happy
   curSubpath = 0;
-  curSubpathX = 0;
   i = 0;
   while (i < path->length) {
 
@@ -152,7 +168,6 @@ SplashXPath::SplashXPath(SplashPath *path, SplashCoord *matrix,
       xsp = x0;
       ysp = y0;
       curSubpath = i;
-      curSubpathX = length;
       ++i;
 
     } else {
@@ -267,9 +282,9 @@ void SplashXPath::addCurve(SplashCoord x0, SplashCoord y0,
 			   SplashCoord x3, SplashCoord y3,
 			   SplashCoord flatness,
 			   GBool first, GBool last, GBool end0, GBool end1) {
-  SplashCoord cx[splashMaxCurveSplits + 1][3];
-  SplashCoord cy[splashMaxCurveSplits + 1][3];
-  int cNext[splashMaxCurveSplits + 1];
+  SplashCoord *cx = new SplashCoord[(splashMaxCurveSplits + 1) * 3];
+  SplashCoord *cy = new SplashCoord[(splashMaxCurveSplits + 1) * 3];
+  int *cNext = new int[splashMaxCurveSplits + 1];
   SplashCoord xl0, xl1, xl2, xr0, xr1, xr2, xr3, xx1, xx2, xh;
   SplashCoord yl0, yl1, yl2, yr0, yr1, yr2, yr3, yy1, yy2, yh;
   SplashCoord dx, dy, mx, my, d1, d2, flatness2;
@@ -280,20 +295,34 @@ void SplashXPath::addCurve(SplashCoord x0, SplashCoord y0,
   // initial segment
   p1 = 0;
   p2 = splashMaxCurveSplits;
-  cx[p1][0] = x0;  cy[p1][0] = y0;
-  cx[p1][1] = x1;  cy[p1][1] = y1;
-  cx[p1][2] = x2;  cy[p1][2] = y2;
-  cx[p2][0] = x3;  cy[p2][0] = y3;
-  cNext[p1] = p2;
+
+  *(cx + p1 * 3 + 0) = x0;
+  *(cx + p1 * 3 + 1) = x1;
+  *(cx + p1 * 3 + 2) = x2;
+  *(cx + p2 * 3 + 0) = x3;
+
+  *(cy + p1 * 3 + 0) = y0;
+  *(cy + p1 * 3 + 1) = y1;
+  *(cy + p1 * 3 + 2) = y2;
+  *(cy + p2 * 3 + 0) = y3;
+
+  *(cNext + p1) = p2;
 
   while (p1 < splashMaxCurveSplits) {
 
     // get the next segment
-    xl0 = cx[p1][0];  yl0 = cy[p1][0];
-    xx1 = cx[p1][1];  yy1 = cy[p1][1];
-    xx2 = cx[p1][2];  yy2 = cy[p1][2];
-    p2 = cNext[p1];
-    xr3 = cx[p2][0];  yr3 = cy[p2][0];
+    xl0 = *(cx + p1 * 3 + 0);
+    xx1 = *(cx + p1 * 3 + 1);
+    xx2 = *(cx + p1 * 3 + 2);
+
+    yl0 = *(cy + p1 * 3 + 0);
+    yy1 = *(cy + p1 * 3 + 1);
+    yy2 = *(cy + p1 * 3 + 2);
+
+    p2 = *(cNext + p1);
+
+    xr3 = *(cx + p2 * 3 + 0);
+    yr3 = *(cy + p2 * 3 + 0);
 
     // compute the distances from the control points to the
     // midpoint of the straight line (this is a bit of a hack, but
@@ -334,15 +363,30 @@ void SplashXPath::addCurve(SplashCoord x0, SplashCoord y0,
       yr0 = (yl2 + yr1) * 0.5;
       // add the new subdivision points
       p3 = (p1 + p2) / 2;
-      cx[p1][1] = xl1;  cy[p1][1] = yl1;
-      cx[p1][2] = xl2;  cy[p1][2] = yl2;
-      cNext[p1] = p3;
-      cx[p3][0] = xr0;  cy[p3][0] = yr0;
-      cx[p3][1] = xr1;  cy[p3][1] = yr1;
-      cx[p3][2] = xr2;  cy[p3][2] = yr2;
-      cNext[p3] = p2;
+
+      *(cx + p1 * 3 + 1) = xl1;
+      *(cx + p1 * 3 + 2) = xl2;
+
+      *(cy + p1 * 3 + 1) = yl1;
+      *(cy + p1 * 3 + 2) = yl2;
+
+      *(cNext + p1) = p3;
+
+      *(cx + p3 * 3 + 0) = xr0;
+      *(cx + p3 * 3 + 1) = xr1;
+      *(cx + p3 * 3 + 2) = xr2;
+
+      *(cy + p3 * 3 + 0) = yr0;
+      *(cy + p3 * 3 + 1) = yr1;
+      *(cy + p3 * 3 + 2) = yr2;
+
+      *(cNext + p3) = p2;
     }
   }
+
+  delete [] cx;
+  delete [] cy;
+  delete [] cNext;
 }
 
 void SplashXPath::addSegment(SplashCoord x0, SplashCoord y0,
@@ -398,32 +442,30 @@ void SplashXPath::addSegment(SplashCoord x0, SplashCoord y0,
   ++length;
 }
 
-static int cmpXPathSegs(const void *arg0, const void *arg1) {
-  SplashXPathSeg *seg0 = (SplashXPathSeg *)arg0;
-  SplashXPathSeg *seg1 = (SplashXPathSeg *)arg1;
+static bool cmpXPathSegs(const SplashXPathSeg &seg0, const SplashXPathSeg &seg1) {
   SplashCoord x0, y0, x1, y1;
 
-  if (seg0->flags & splashXPathFlip) {
-    x0 = seg0->x1;
-    y0 = seg0->y1;
+  if (seg0.flags & splashXPathFlip) {
+    x0 = seg0.x1;
+    y0 = seg0.y1;
   } else {
-    x0 = seg0->x0;
-    y0 = seg0->y0;
+    x0 = seg0.x0;
+    y0 = seg0.y0;
   }
-  if (seg1->flags & splashXPathFlip) {
-    x1 = seg1->x1;
-    y1 = seg1->y1;
+  if (seg1.flags & splashXPathFlip) {
+    x1 = seg1.x1;
+    y1 = seg1.y1;
   } else {
-    x1 = seg1->x0;
-    y1 = seg1->y0;
+    x1 = seg1.x0;
+    y1 = seg1.y0;
   }
   if (y0 != y1) {
-    return (y0 > y1) ? 1 : -1;
+    return (y0 < y1) ? true : false;
   }
   if (x0 != x1) {
-    return (x0 > x1) ? 1 : -1;
+    return (x0 < x1) ? true : false;
   }
-  return 0;
+  return false;
 }
 
 void SplashXPath::aaScale() {
@@ -439,5 +481,5 @@ void SplashXPath::aaScale() {
 }
 
 void SplashXPath::sort() {
-  qsort(segs, length, sizeof(SplashXPathSeg), &cmpXPathSegs);
+  std::sort(segs, segs + length, &cmpXPathSegs);
 }

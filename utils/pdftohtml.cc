@@ -13,7 +13,13 @@
 // All changes made under the Poppler project to this file are licensed
 // under GPL version 2 or later
 //
-// Copyright (C) 2007-2008 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2007-2008, 2010, 2012 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2010 Hib Eris <hib@hiberis.nl>
+// Copyright (C) 2010 Mike Slegeir <tehpola@yahoo.com>
+// Copyright (C) 2010 Suzuki Toshiya <mpsuzuki@hiroshima-u.ac.jp>
+// Copyright (C) 2010 OSSD CDAC Mumbai by Leena Chourey (leenac@cdacmumbai.in) and Onkar Potdar (onkar@cdacmumbai.in)
+// Copyright (C) 2011 Steven Murdoch <Steven.Murdoch@cl.cam.ac.uk>
+// Copyright (C) 2012 Igor Slepchin <igor.redhat@gmail.com>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -41,9 +47,15 @@
 #include "Catalog.h"
 #include "Page.h"
 #include "PDFDoc.h"
+#include "PDFDocFactory.h"
 #include "HtmlOutputDev.h"
+#ifdef HAVE_SPLASH
+#include "SplashOutputDev.h"
+#include "splash/SplashBitmap.h"
+#endif
 #include "PSOutputDev.h"
 #include "GlobalParams.h"
+#include "PDFDocEncoding.h"
 #include "Error.h"
 #include "DateInfo.h"
 #include "goo/gfile.h"
@@ -59,9 +71,11 @@ GBool printCommands = gTrue;
 static GBool printHelp = gFalse;
 GBool printHtml = gFalse;
 GBool complexMode=gFalse;
+GBool singleHtml=gFalse; // singleHtml
 GBool ignore=gFalse;
-//char extension[5]=".png";
-double scale=1.5;
+static GBool useSplash=gTrue;
+static char extension[5]="png";
+static double scale=1.5;
 GBool noframes=gFalse;
 GBool stout=gFalse;
 GBool xml=gFalse;
@@ -72,7 +86,7 @@ GBool showHidden = gFalse;
 GBool noMerge = gFalse;
 static char ownerPassword[33] = "";
 static char userPassword[33] = "";
-static char gsDevice[33] = "png16m";
+static char gsDevice[33] = "none";
 static GBool printVersion = gFalse;
 
 static GooString* getInfoString(Dict *infoDict, char *key);
@@ -97,6 +111,8 @@ static const ArgDesc argDesc[] = {
    "exchange .pdf links by .html"}, 
   {"-c",      argFlag,     &complexMode,          0,
    "generate complex document"},
+  {"-s",      argFlag,     &singleHtml,          0,
+   "generate single document that includes all pages"},
   {"-i",      argFlag,     &ignore,        0,
    "ignore images"},
   {"-noframes", argFlag,   &noframes,      0,
@@ -115,6 +131,8 @@ static const ArgDesc argDesc[] = {
    "output text encoding name"},
   {"-dev",    argString,   gsDevice,       sizeof(gsDevice),
    "output device name for Ghostscript (png16m, jpeg etc)"},
+  {"-fmt",    argString,   extension,      sizeof(extension),
+   "image file format for Splash output (png or jpg)"},
   {"-v",      argFlag,     &printVersion,  0,
    "print copyright and version info"},
   {"-opw",    argString,   ownerPassword,  sizeof(ownerPassword),
@@ -126,6 +144,32 @@ static const ArgDesc argDesc[] = {
   {NULL}
 };
 
+#ifdef HAVE_SPLASH
+class SplashOutputDevNoText : public SplashOutputDev {
+public:
+  SplashOutputDevNoText(SplashColorMode colorModeA, int bitmapRowPadA,
+        GBool reverseVideoA, SplashColorPtr paperColorA,
+        GBool bitmapTopDownA = gTrue,
+        GBool allowAntialiasA = gTrue) : SplashOutputDev(colorModeA,
+            bitmapRowPadA, reverseVideoA, paperColorA, bitmapTopDownA,
+            allowAntialiasA) { }
+  virtual ~SplashOutputDevNoText() { }
+  
+  void drawChar(GfxState *state, double x, double y,
+      double dx, double dy,
+      double originX, double originY,
+      CharCode code, int nBytes, Unicode *u, int uLen) { }
+  GBool beginType3Char(GfxState *state, double x, double y,
+      double dx, double dy,
+      CharCode code, Unicode *u, int uLen) { return false; }
+  void endType3Char(GfxState *state) { }
+  void beginTextObject(GfxState *state) { }
+  GBool deviceHasTextClip(GfxState *state) { return false; }
+  void endTextObject(GfxState *state) { }
+  GBool interpretType3Chars() { return gFalse; }
+};
+#endif
+
 int main(int argc, char *argv[]) {
   PDFDoc *doc = NULL;
   GooString *fileName = NULL;
@@ -134,10 +178,12 @@ int main(int argc, char *argv[]) {
   GooString *htmlFileName = NULL;
   GooString *psFileName = NULL;
   HtmlOutputDev *htmlOut = NULL;
+#ifdef HAVE_SPLASH
+  SplashOutputDev *splashOut = NULL;
+#endif
   PSOutputDev *psOut = NULL;
   GBool ok;
   char *p;
-  char extension[16] = "png";
   GooString *ownerPW, *userPW;
   Object info;
   char * extsList[] = {"png", "jpeg", "bmp", "pcx", "tiff", "pbm", NULL};
@@ -187,7 +233,13 @@ int main(int argc, char *argv[]) {
 
   fileName = new GooString(argv[1]);
 
-  doc = new PDFDoc(fileName, ownerPW, userPW);
+  if (fileName->cmp("-") == 0) {
+      delete fileName;
+      fileName = new GooString("fd://0");
+  }
+
+  doc = PDFDocFactory().createPDFDoc(*fileName, ownerPW, userPW);
+
   if (userPW) {
     delete userPW;
   }
@@ -210,19 +262,28 @@ int main(int argc, char *argv[]) {
   // construct text file name
   if (argc == 3) {
     GooString* tmp = new GooString(argv[2]);
-    p=tmp->getCString()+tmp->getLength()-5;
-    if (!xml)
-      if (!strcmp(p, ".html") || !strcmp(p, ".HTML"))
-	htmlFileName = new GooString(tmp->getCString(),
-				   tmp->getLength() - 5);
-      else htmlFileName =new GooString(tmp);
-    else   
-      if (!strcmp(p, ".xml") || !strcmp(p, ".XML"))
-	htmlFileName = new GooString(tmp->getCString(),
-				   tmp->getLength() - 5);
-      else htmlFileName =new GooString(tmp);
-    
+    if (!xml) {
+      if (tmp->getLength() >= 5) {
+        p = tmp->getCString() + tmp->getLength() - 5;
+        if (!strcmp(p, ".html") || !strcmp(p, ".HTML")) {
+          htmlFileName = new GooString(tmp->getCString(), tmp->getLength() - 5);
+        }
+      }
+    } else {
+      if (tmp->getLength() >= 4) {
+        p = tmp->getCString() + tmp->getLength() - 4;
+        if (!strcmp(p, ".xml") || !strcmp(p, ".XML")) {
+          htmlFileName = new GooString(tmp->getCString(), tmp->getLength() - 4);
+        }
+      }
+    }
+    if (!htmlFileName) {
+      htmlFileName =new GooString(tmp);
+    }
     delete tmp;
+  } else if (fileName->cmp("fd://0") == 0) {
+      error(-1, "You have to provide an output filename when reading form stdin.");
+      goto error;
   } else {
     p = fileName->getCString() + fileName->getLength() - 4;
     if (!strcmp(p, ".pdf") || !strcmp(p, ".PDF"))
@@ -236,7 +297,7 @@ int main(int argc, char *argv[]) {
    if (scale>3.0) scale=3.0;
    if (scale<0.5) scale=0.5;
    
-   if (complexMode) {
+   if (complexMode || singleHtml) {
      //noframes=gFalse;
      stout=gFalse;
    } 
@@ -244,11 +305,13 @@ int main(int argc, char *argv[]) {
    if (stout) {
      noframes=gTrue;
      complexMode=gFalse;
+     singleHtml=gFalse;
    }
 
    if (xml)
    { 
        complexMode = gTrue;
+       singleHtml = gFalse;
        noframes = gTrue;
        noMerge = gTrue;
    }
@@ -272,18 +335,40 @@ int main(int argc, char *argv[]) {
   info.free();
   if( !docTitle ) docTitle = new GooString(htmlFileName);
 
-  /* determine extensions of output backgroun images */
-  {int i;
-  for(i = 0; extsList[i]; i++)
-  {
-	  if( strstr(gsDevice, extsList[i]) != (char *) NULL )
-	  {
-		  strncpy(extension, extsList[i], sizeof(extension));
-		  break;
-	  }
-  }}
+  if( strcmp("none", gsDevice) ) {
+    useSplash = gFalse;
+    /* determine extensions of output background images */
+    int i;
+    for(i = 0; extsList[i]; i++)
+    {
+      if( strstr(gsDevice, extsList[i]) != (char *) NULL )
+      {
+        strncpy(extension, extsList[i], sizeof(extension));
+        break;
+      }
+    }
+  }
 
-  rawOrder = complexMode; // todo: figure out what exactly rawOrder do :)
+#ifndef HAVE_SPLASH
+  if( useSplash ) {
+    fprintf(stderr, "You are trying to use the -fmt option but your pdftohtml was built without support for it. Please use the -dev option\n");
+    delete docTitle;
+    delete author;
+    delete keywords;
+    delete subject;
+    delete date;
+    delete htmlFileName;
+    delete globalParams;
+    delete fileName;
+    delete doc;
+    return -1;
+  }
+#endif
+
+  if (!singleHtml)
+      rawOrder = complexMode; // todo: figure out what exactly rawOrder do :)
+  else
+      rawOrder = singleHtml;
 
   // write text file
   htmlOut = new HtmlOutputDev(htmlFileName->getCString(), 
@@ -316,64 +401,97 @@ int main(int argc, char *argv[]) {
 
   if (htmlOut->isOk())
   {
-    doc->displayPages(htmlOut, firstPage, lastPage, 72, 72, 0,
+    doc->displayPages(htmlOut, firstPage, lastPage, 72 * scale, 72 * scale, 0,
 		      gTrue, gFalse, gFalse);
   	if (!xml)
 	{
-		htmlOut->dumpDocOutline(doc->getCatalog());
+		htmlOut->dumpDocOutline(doc);
 	}
   }
   
-  if( complexMode && !xml && !ignore ) {
-    int h=xoutRound(htmlOut->getPageHeight()/scale);
-    int w=xoutRound(htmlOut->getPageWidth()/scale);
-    //int h=xoutRound(doc->getPageHeight(1)/scale);
-    //int w=xoutRound(doc->getPageWidth(1)/scale);
+  if ((complexMode || singleHtml) && !xml && !ignore) {
+    if(useSplash) {
+#ifdef HAVE_SPLASH
+      GooString *imgFileName = NULL;
+      // White paper color
+      SplashColor color;
+      color[0] = color[1] = color[2] = 255;
+      // If the user specified "jpg" use JPEG, otherwise PNG
+      SplashImageFileFormat format = strcmp(extension, "jpg") ?
+          splashFormatPng : splashFormatJpeg;
 
-    psFileName = new GooString(htmlFileName->getCString());
-    psFileName->append(".ps");
+      splashOut = new SplashOutputDevNoText(splashModeRGB8, 4, gFalse, color);
+      splashOut->startDoc(doc->getXRef());
 
-    psOut = new PSOutputDev(psFileName->getCString(), doc->getXRef(),
-			    doc->getCatalog(), NULL, firstPage, lastPage, psModePS, w, h);
-    psOut->setDisplayText(gFalse);
-    doc->displayPages(psOut, firstPage, lastPage, 72, 72, 0,
-		      gTrue, gFalse, gFalse);
-    delete psOut;
+      for (int pg = firstPage; pg <= lastPage; ++pg) {
+        doc->displayPage(splashOut, pg,
+                         72 * scale, 72 * scale,
+                         0, gTrue, gFalse, gFalse);
+        SplashBitmap *bitmap = splashOut->getBitmap();
 
-    /*sprintf(buf, "%s -sDEVICE=png16m -dBATCH -dNOPROMPT -dNOPAUSE -r72 -sOutputFile=%s%%03d.png -g%dx%d -q %s", GHOSTSCRIPT, htmlFileName->getCString(), w, h,
+        imgFileName = GooString::format("{0:s}{1:03d}.{2:s}", 
+            htmlFileName->getCString(), pg, extension);
+
+        bitmap->writeImgFile(format, imgFileName->getCString(),
+                             72 * scale, 72 * scale);
+
+        delete imgFileName;
+      }
+
+      delete splashOut;
+#endif
+    } else {
+      int h=xoutRound(htmlOut->getPageHeight()/scale);
+      int w=xoutRound(htmlOut->getPageWidth()/scale);
+      //int h=xoutRound(doc->getPageHeight(1)/scale);
+      //int w=xoutRound(doc->getPageWidth(1)/scale);
+
+      psFileName = new GooString(htmlFileName->getCString());
+      psFileName->append(".ps");
+
+      psOut = new PSOutputDev(psFileName->getCString(), doc, doc->getXRef(),
+          doc->getCatalog(), NULL, firstPage, lastPage, psModePS, w, h);
+      psOut->setDisplayText(gFalse);
+      doc->displayPages(psOut, firstPage, lastPage, 72, 72, 0,
+          gTrue, gFalse, gFalse);
+      delete psOut;
+
+      /*sprintf(buf, "%s -sDEVICE=png16m -dBATCH -dNOPROMPT -dNOPAUSE -r%d -sOutputFile=%s%%03d.png -g%dx%d -q %s", GHOSTSCRIPT, resolution, htmlFileName->getCString(), w, h,
       psFileName->getCString());*/
-    
-    GooString *gsCmd = new GooString(GHOSTSCRIPT);
-    GooString *tw, *th, *sc;
-    gsCmd->append(" -sDEVICE=");
-	gsCmd->append(gsDevice);
-	gsCmd->append(" -dBATCH -dNOPROMPT -dNOPAUSE -r");
-    sc = GooString::fromInt(static_cast<int>(72*scale));
-    gsCmd->append(sc);
-    gsCmd->append(" -sOutputFile=");
-    gsCmd->append("\"");
-    gsCmd->append(htmlFileName);
-    gsCmd->append("%03d.");
-	gsCmd->append(extension);
-	gsCmd->append("\" -g");
-    tw = GooString::fromInt(static_cast<int>(scale*w));
-    gsCmd->append(tw);
-    gsCmd->append("x");
-    th = GooString::fromInt(static_cast<int>(scale*h));
-    gsCmd->append(th);
-    gsCmd->append(" -q \"");
-    gsCmd->append(psFileName);
-    gsCmd->append("\"");
-//    printf("running: %s\n", gsCmd->getCString());
-    if( !executeCommand(gsCmd->getCString()) && !errQuiet) {
-      error(-1, "Failed to launch Ghostscript!\n");
+
+      GooString *gsCmd = new GooString(GHOSTSCRIPT);
+      GooString *tw, *th, *sc;
+      gsCmd->append(" -sDEVICE=");
+      gsCmd->append(gsDevice);
+      gsCmd->append(" -dBATCH -dNOPROMPT -dNOPAUSE -r");
+      sc = GooString::fromInt(static_cast<int>(72*scale));
+      gsCmd->append(sc);
+      gsCmd->append(" -sOutputFile=");
+      gsCmd->append("\"");
+      gsCmd->append(htmlFileName);
+      gsCmd->append("%03d.");
+      gsCmd->append(extension);
+      gsCmd->append("\" -g");
+      tw = GooString::fromInt(static_cast<int>(scale*w));
+      gsCmd->append(tw);
+      gsCmd->append("x");
+      th = GooString::fromInt(static_cast<int>(scale*h));
+      th = GooString::fromInt(static_cast<int>(scale*h));
+      gsCmd->append(th);
+      gsCmd->append(" -q \"");
+      gsCmd->append(psFileName);
+      gsCmd->append("\"");
+      //    printf("running: %s\n", gsCmd->getCString());
+      if( !executeCommand(gsCmd->getCString()) && !errQuiet) {
+        error(-1, "Failed to launch Ghostscript!\n");
+      }
+      unlink(psFileName->getCString());
+      delete tw;
+      delete th;
+      delete sc;
+      delete gsCmd;
+      delete psFileName;
     }
-    unlink(psFileName->getCString());
-    delete tw;
-    delete th;
-    delete sc;
-    delete gsCmd;
-    delete psFileName;
   }
   
   delete htmlOut;
@@ -381,6 +499,7 @@ int main(int argc, char *argv[]) {
   // clean up
  error:
   if(doc) delete doc;
+  delete fileName;
   if(globalParams) delete globalParams;
 
   if(htmlFileName) delete htmlFileName;
@@ -395,13 +514,45 @@ int main(int argc, char *argv[]) {
 
 static GooString* getInfoString(Dict *infoDict, char *key) {
   Object obj;
-  GooString *s1 = NULL;
+  // Raw value as read from PDF (may be in pdfDocEncoding or UCS2)
+  GooString *rawString;
+  // Value converted to unicode
+  Unicode *unicodeString;
+  int unicodeLength;
+  // Value HTML escaped and converted to desired encoding
+  GooString *encodedString = NULL;
+  // Is rawString UCS2 (as opposed to pdfDocEncoding)
+  GBool isUnicode;
 
   if (infoDict->lookup(key, &obj)->isString()) {
-    s1 = new GooString(obj.getString());
+    rawString = obj.getString();
+
+    // Convert rawString to unicode
+    if (rawString->hasUnicodeMarker()) {
+      isUnicode = gTrue;
+      unicodeLength = (obj.getString()->getLength() - 2) / 2;
+    } else {
+      isUnicode = gFalse;
+      unicodeLength = obj.getString()->getLength();
+    }
+    unicodeString = new Unicode[unicodeLength];
+
+    for (int i=0; i<unicodeLength; i++) {
+      if (isUnicode) {
+        unicodeString[i] = ((rawString->getChar((i+1)*2) & 0xff) << 8) |
+          (rawString->getChar(((i+1)*2)+1) & 0xff);
+      } else {
+        unicodeString[i] = pdfDocEncoding[rawString->getChar(i) & 0xff];
+      }
+    }
+
+    // HTML escape and encode unicode
+    encodedString = HtmlFont::HtmlFilter(unicodeString, unicodeLength);
+    delete[] unicodeString;
   }
+
   obj.free();
-  return s1;
+  return encodedString;
 }
 
 static GooString* getInfoDate(Dict *infoDict, char *key) {
