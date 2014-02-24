@@ -1,30 +1,56 @@
 #!/usr/bin/make -f
 
-include /usr/share/cdbs/1/rules/debhelper.mk
-include /usr/share/cdbs/1/rules/patchsys-quilt.mk
-include /usr/share/cdbs/1/class/autotools.mk
-
 # use qt4's moc as the default moc is qt3's when both are installed
 PATH := /usr/share/qt4/bin:$(PATH)
 export PATH
 
-# a trick to fix xpdfrc location without modifying autotools stuff
-DEB_CONFIGURE_SYSCONFDIR := /etc/xpdf
+# avoid overlinking and reduce library dependencies
+export DEB_LDFLAGS_MAINT_APPEND := -Wl,--as-needed
+
+# make the build verbose
+export V=1
+
+# enable all the hardening options
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 # disable gtk stuff to minimize Build-Depends
-DEB_CONFIGURE_EXTRA_FLAGS +=			\
+CONFIGURE_ARGS :=				\
 	--enable-libjpeg			\
 	--enable-splash-output			\
 	--enable-cairo-output			\
 	--enable-poppler-glib			\
-	--enable-poppler-qt			\
 	--enable-poppler-qt4			\
-	--enable-a4-paper			\
+	--enable-poppler-cpp			\
 	--enable-gtk-doc			\
+	--enable-xpdf-headers			\
+	--enable-introspection=yes		\
 	--disable-gtk-test
 
-DEB_DH_MAKESHLIBS_ARGS_libpoppler5 += -V"libpoppler5"
-DEB_DH_MAKESHLIBS_ARGS_libpoppler-glib4 += -V"libpoppler-glib4 (>= 0.12)"
-DEB_DH_MAKESHLIBS_ARGS_libpoppler-qt2 += -V"libpoppler-qt2 (>= 0.12)"
-DEB_DH_MAKESHLIBS_ARGS_libpoppler-qt4-3 += -V"libpoppler-qt4-3 (>= 0.12)"
+%:
+	dh $@ --parallel --with gir
 
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -f glib/reference/html/*
+
+override_dh_auto_configure:
+	dh_auto_configure -- $(CONFIGURE_ARGS)
+
+override_dh_install:
+	dh_install --list-missing
+
+override_dh_installchangelogs:
+	dh_installchangelogs -plibpoppler19
+	dh_installchangelogs --remaining-packages -XChangeLog
+
+override_dh_strip:
+	dh_strip --dbg-package=poppler-dbg
+
+override_dh_makeshlibs:
+	dh_makeshlibs -plibpoppler19 -V
+	dh_makeshlibs -plibpoppler-cpp0 -V"libpoppler-cpp0 (>= 0.16)"
+	dh_makeshlibs -plibpoppler-glib8 -V"libpoppler-glib8 (>= 0.18)"
+	dh_makeshlibs -plibpoppler-qt4-3 -V"libpoppler-qt4-3 (>= 0.18)"
+	dh_makeshlibs --remaining-packages
+
+.PHONY: override_dh_auto_test

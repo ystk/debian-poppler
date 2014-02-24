@@ -22,6 +22,9 @@ poppler_action_type_get_type (void)
       { POPPLER_ACTION_URI, "POPPLER_ACTION_URI", "uri" },
       { POPPLER_ACTION_NAMED, "POPPLER_ACTION_NAMED", "named" },
       { POPPLER_ACTION_MOVIE, "POPPLER_ACTION_MOVIE", "movie" },
+      { POPPLER_ACTION_RENDITION, "POPPLER_ACTION_RENDITION", "rendition" },
+      { POPPLER_ACTION_OCG_STATE, "POPPLER_ACTION_OCG_STATE", "ocg-state" },
+      { POPPLER_ACTION_JAVASCRIPT, "POPPLER_ACTION_JAVASCRIPT", "javascript" },
       { 0, NULL, NULL }
     };
     GType g_define_type_id = 
@@ -54,6 +57,49 @@ poppler_dest_type_get_type (void)
     };
     GType g_define_type_id = 
        g_enum_register_static (g_intern_static_string ("PopplerDestType"), values);
+      
+    g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+  }
+    
+  return g_define_type_id__volatile;
+}
+
+GType
+poppler_action_movie_operation_get_type (void)
+{
+  static volatile gsize g_define_type_id__volatile = 0;
+ 
+  if (g_once_init_enter (&g_define_type_id__volatile)) {
+    static const GEnumValue values[] = {
+      { POPPLER_ACTION_MOVIE_PLAY, "POPPLER_ACTION_MOVIE_PLAY", "play" },
+      { POPPLER_ACTION_MOVIE_PAUSE, "POPPLER_ACTION_MOVIE_PAUSE", "pause" },
+      { POPPLER_ACTION_MOVIE_RESUME, "POPPLER_ACTION_MOVIE_RESUME", "resume" },
+      { POPPLER_ACTION_MOVIE_STOP, "POPPLER_ACTION_MOVIE_STOP", "stop" },
+      { 0, NULL, NULL }
+    };
+    GType g_define_type_id = 
+       g_enum_register_static (g_intern_static_string ("PopplerActionMovieOperation"), values);
+      
+    g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+  }
+    
+  return g_define_type_id__volatile;
+}
+
+GType
+poppler_action_layer_action_get_type (void)
+{
+  static volatile gsize g_define_type_id__volatile = 0;
+ 
+  if (g_once_init_enter (&g_define_type_id__volatile)) {
+    static const GEnumValue values[] = {
+      { POPPLER_ACTION_LAYER_ON, "POPPLER_ACTION_LAYER_ON", "on" },
+      { POPPLER_ACTION_LAYER_OFF, "POPPLER_ACTION_LAYER_OFF", "off" },
+      { POPPLER_ACTION_LAYER_TOGGLE, "POPPLER_ACTION_LAYER_TOGGLE", "toggle" },
+      { 0, NULL, NULL }
+    };
+    GType g_define_type_id = 
+       g_enum_register_static (g_intern_static_string ("PopplerActionLayerAction"), values);
       
     g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
   }
@@ -181,6 +227,9 @@ poppler_permissions_get_type (void)
       { POPPLER_PERMISSIONS_OK_TO_COPY, "POPPLER_PERMISSIONS_OK_TO_COPY", "ok-to-copy" },
       { POPPLER_PERMISSIONS_OK_TO_ADD_NOTES, "POPPLER_PERMISSIONS_OK_TO_ADD_NOTES", "ok-to-add-notes" },
       { POPPLER_PERMISSIONS_OK_TO_FILL_FORM, "POPPLER_PERMISSIONS_OK_TO_FILL_FORM", "ok-to-fill-form" },
+      { POPPLER_PERMISSIONS_OK_TO_EXTRACT_CONTENTS, "POPPLER_PERMISSIONS_OK_TO_EXTRACT_CONTENTS", "ok-to-extract-contents" },
+      { POPPLER_PERMISSIONS_OK_TO_ASSEMBLE, "POPPLER_PERMISSIONS_OK_TO_ASSEMBLE", "ok-to-assemble" },
+      { POPPLER_PERMISSIONS_OK_TO_PRINT_HIGH_RESOLUTION, "POPPLER_PERMISSIONS_OK_TO_PRINT_HIGH_RESOLUTION", "ok-to-print-high-resolution" },
       { POPPLER_PERMISSIONS_FULL, "POPPLER_PERMISSIONS_FULL", "full" },
       { 0, NULL, NULL }
     };
@@ -573,6 +622,28 @@ poppler_selection_style_get_type (void)
     };
     GType g_define_type_id = 
        g_enum_register_static (g_intern_static_string ("PopplerSelectionStyle"), values);
+      
+    g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
+  }
+    
+  return g_define_type_id__volatile;
+}
+
+GType
+poppler_print_flags_get_type (void)
+{
+  static volatile gsize g_define_type_id__volatile = 0;
+ 
+  if (g_once_init_enter (&g_define_type_id__volatile)) {
+    static const GFlagsValue values[] = {
+      { POPPLER_PRINT_DOCUMENT, "POPPLER_PRINT_DOCUMENT", "document" },
+      { POPPLER_PRINT_MARKUP_ANNOTS, "POPPLER_PRINT_MARKUP_ANNOTS", "markup-annots" },
+      { POPPLER_PRINT_STAMP_ANNOTS_ONLY, "POPPLER_PRINT_STAMP_ANNOTS_ONLY", "stamp-annots-only" },
+      { POPPLER_PRINT_ALL, "POPPLER_PRINT_ALL", "all" },
+      { 0, NULL, NULL }
+    };
+    GType g_define_type_id = 
+       g_flags_register_static (g_intern_static_string ("PopplerPrintFlags"), values);
       
     g_once_init_leave (&g_define_type_id__volatile, g_define_type_id);
   }

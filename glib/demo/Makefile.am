@@ -9,7 +9,7 @@ INCLUDES = 					\
 AM_LDFLAGS = @auto_import_flags@
 
 if BUILD_GTK_TEST
-noinst_PROGRAMS = poppler-glib-demo
+bin_PROGRAMS = poppler-glib-demo
 endif
 
 poppler_glib_demo_SOURCES = 			\
@@ -36,8 +36,12 @@ poppler_glib_demo_SOURCES = 			\
 	outline.c				\
 	page.h					\
 	page.c					\
+	print.h					\
+	print.c					\
 	render.h				\
 	render.c				\
+	selections.h				\
+	selections.c				\
 	text.h					\
 	text.c					\
 	transitions.h				\

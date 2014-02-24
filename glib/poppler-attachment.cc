@@ -23,6 +23,12 @@
 #include "poppler.h"
 #include "poppler-private.h"
 
+/**
+ * SECTION:poppler-attachment
+ * @short_description: Attachments
+ * @title: PopplerAttachment
+ */
+
 /* FIXME: We need to add gettext support sometime */
 #define _(x) (x)
 
@@ -30,7 +36,6 @@ typedef struct _PopplerAttachmentPrivate PopplerAttachmentPrivate;
 struct _PopplerAttachmentPrivate
 {
   Object *obj_stream;
-  PopplerDocument *document;
 };
 
 #define POPPLER_ATTACHMENT_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE ((obj), POPPLER_TYPE_ATTACHMENT, PopplerAttachmentPrivate))
@@ -67,12 +72,6 @@ poppler_attachment_dispose (GObject *obj)
       priv->obj_stream = NULL;
     }
 
-  if (priv->document)
-    {
-      g_object_unref (priv->document);
-      priv->document = NULL;
-    }
-
   G_OBJECT_CLASS (poppler_attachment_parent_class)->dispose (obj);
 }
 
@@ -101,36 +100,37 @@ poppler_attachment_finalize (GObject *obj)
 /* Public functions */
 
 PopplerAttachment *
-_poppler_attachment_new (PopplerDocument *document,
-			 EmbFile         *emb_file)
+_poppler_attachment_new (FileSpec *emb_file)
 {
   PopplerAttachment *attachment;
   PopplerAttachmentPrivate *priv;
+  EmbFile *embFile;
 
-  g_assert (document != NULL);
   g_assert (emb_file != NULL);
 
   attachment = (PopplerAttachment *) g_object_new (POPPLER_TYPE_ATTACHMENT, NULL);
   priv = POPPLER_ATTACHMENT_GET_PRIVATE (attachment);
 
-  priv->document = (PopplerDocument *) g_object_ref (document);
+  if (emb_file->getFileName ())
+    attachment->name = _poppler_goo_string_to_utf8 (emb_file->getFileName ());
+  if (emb_file->getDescription ())
+    attachment->description = _poppler_goo_string_to_utf8 (emb_file->getDescription ());
 
-  if (emb_file->name ())
-    attachment->name = _poppler_goo_string_to_utf8 (emb_file->name ());
-  if (emb_file->description ())
-    attachment->description = _poppler_goo_string_to_utf8 (emb_file->description ());
+  embFile = emb_file->getEmbeddedFile();
+  attachment->size = embFile->size ();
 
-  attachment->size = emb_file->size ();
-  
-  _poppler_convert_pdf_date_to_gtime (emb_file->createDate (), (time_t *)&attachment->ctime);
-  _poppler_convert_pdf_date_to_gtime (emb_file->modDate (), (time_t *)&attachment->mtime);
+  if (embFile->createDate ())
+    _poppler_convert_pdf_date_to_gtime (embFile->createDate (), (time_t *)&attachment->ctime);
+  if (embFile->modDate ())
+    _poppler_convert_pdf_date_to_gtime (embFile->modDate (), (time_t *)&attachment->mtime);
 
-  if (emb_file->checksum ()->getLength () > 0)
-	  attachment->checksum = g_string_new_len (emb_file->checksum ()->getCString (),
-						   emb_file->checksum ()->getLength ());
-  
+  if (embFile->checksum () && embFile->checksum ()->getLength () > 0)
+    attachment->checksum = g_string_new_len (embFile->checksum ()->getCString (),
+                                             embFile->checksum ()->getLength ());
   priv->obj_stream = new Object();
-  emb_file->streamObject().copy(priv->obj_stream);
+  priv->obj_stream->initStream(embFile->stream());
+  // Copy the stream
+  embFile->stream()->incRef();
 
   return attachment;
 }
@@ -162,7 +162,7 @@ save_helper (const gchar  *buf,
  * poppler_attachment_save:
  * @attachment: A #PopplerAttachment.
  * @filename: name of file to save
- * @error: return location for error, or %NULL.
+ * @error: (allow-none): return location for error, or %NULL.
  * 
  * Saves @attachment to a file indicated by @filename.  If @error is set, %FALSE
  * will be returned. Possible errors include those in the #G_FILE_ERROR domain
@@ -210,7 +210,7 @@ poppler_attachment_save (PopplerAttachment  *attachment,
       return FALSE;
     }
 
-  return TRUE;
+  return result;
 }
 
 #define BUF_SIZE 1024
@@ -218,9 +218,9 @@ poppler_attachment_save (PopplerAttachment  *attachment,
 /**
  * poppler_attachment_save_to_callback:
  * @attachment: A #PopplerAttachment.
- * @save_func: a function that is called to save each block of data that the save routine generates.
+ * @save_func: (scope call): a function that is called to save each block of data that the save routine generates.
  * @user_data: user data to pass to the save function.
- * @error: return location for error, or %NULL.
+ * @error: (allow-none): return location for error, or %NULL.
  * 
  * Saves @attachment by feeding the produced data to @save_func. Can be used
  * when you want to store the attachment to something other than a file, such as

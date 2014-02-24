@@ -15,13 +15,13 @@
 //
 // Copyright (C) 2006 Scott Turner <scotty1024@mac.com>
 // Copyright (C) 2007, 2008 Julien Rebetez <julienr@svn.gnome.org>
-// Copyright (C) 2007-2009 Carlos Garcia Campos <carlosgc@gnome.org>
+// Copyright (C) 2007-2011 Carlos Garcia Campos <carlosgc@gnome.org>
 // Copyright (C) 2007, 2008 Iñigo Martínez <inigomartinez@gmail.com>
 // Copyright (C) 2008 Michael Vrable <mvrable@cs.ucsd.edu>
 // Copyright (C) 2008 Hugo Mercier <hmercier31@gmail.com>
 // Copyright (C) 2008 Pino Toscano <pino@kde.org>
 // Copyright (C) 2008 Tomas Are Haavet <tomasare@gmail.com>
-// Copyright (C) 2009 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2009-2011 Albert Astals Cid <aacid@kde.org>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -35,16 +35,21 @@
 #pragma interface
 #endif
 
+#include "Object.h"
+
 class XRef;
 class Gfx;
 class Catalog;
 class CharCodeToUnicode;
 class GfxFont;
-class GfxFontDict;
+class GfxResources;
 class Form;
 class FormWidget;
+class FormField;
+class FormFieldChoice;
 class PDFRectangle;
 class Movie;
+class LinkAction;
 class OCGs;
 class Sound;
 
@@ -230,8 +235,11 @@ public:
   virtual AnnotBorderStyle getStyle() const { return style; }
 
 protected:
+  GBool parseDashArray(Object *dashObj);
+
   AnnotBorderType type;
   double width;
+  static const int DASH_LIMIT = 10; // implementation note 82 in Appendix H.
   int dashLength;
   double *dash;
   AnnotBorderStyle style;
@@ -250,7 +258,6 @@ public:
   double getVerticalCorner() const { return verticalCorner; }
 
 protected:
-  static const int DASH_LIMIT = 10; // implementation note 82 in Appendix H.
   double horizontalCorner;          // (Default 0)
   double verticalCorner;            // (Default 0)
   // double width;                  // (Default 1)  (inherited from AnnotBorder)
@@ -290,52 +297,17 @@ public:
   AnnotColor(double gray);
   AnnotColor(double r, double g, double b);
   AnnotColor(double c, double m, double y, double k);
-  AnnotColor(Array *array);
-  ~AnnotColor();
+  AnnotColor(Array *array, int adjust = 0);
+
+  void adjustColor(int adjust);
 
   AnnotColorSpace getSpace() const { return (AnnotColorSpace) length; }
-  double *getValues() const { return values; }
+  const double *getValues() const { return values; }
 
 private:
 
-  double *values;
+  double values[4];
   int length;
-};
-
-//------------------------------------------------------------------------
-// AnnotBorderStyle
-//------------------------------------------------------------------------
-
-enum AnnotBorderType {
-  annotBorderSolid,
-  annotBorderDashed,
-  annotBorderBeveled,
-  annotBorderInset,
-  annotBorderUnderlined
-};
-
-class AnnotBorderStyle {
-public:
-
-  AnnotBorderStyle(AnnotBorderType typeA, double widthA,
-		   double *dashA, int dashLengthA,
-		   double rA, double gA, double bA);
-  ~AnnotBorderStyle();
-
-  AnnotBorderType getType() { return type; }
-  double getWidth() { return width; }
-  void getDash(double **dashA, int *dashLengthA)
-    { *dashA = dash; *dashLengthA = dashLength; }
-  void getColor(double *rA, double *gA, double *bA)
-    { *rA = r; *gA = g; *bA = b; }
-
-private:
-
-  AnnotBorderType type;
-  double width;
-  double *dash;
-  int dashLength;
-  double r, g, b;
 };
 
 //------------------------------------------------------------------------
@@ -486,8 +458,10 @@ public:
   Annot(XRef *xrefA, PDFRectangle *rectA, Catalog *catalog);
   Annot(XRef *xrefA, Dict *dict, Catalog *catalog);
   Annot(XRef *xrefA, Dict *dict, Catalog *catalog, Object *obj);
-  virtual ~Annot();
   GBool isOk() { return ok; }
+
+  void incRefCnt();
+  void decRefCnt();
 
   virtual void draw(Gfx *gfx, GBool printing);
   // Get appearance object.
@@ -509,12 +483,19 @@ public:
   // new_color. 
   void setColor(AnnotColor *new_color);
 
+  void setPage(Ref *pageRef, int pageIndex);
+
+  void setAppearanceState(char *state);
+
   // getters
+  XRef *getXRef() const { return xref; }
+  GBool getHasRef() const { return hasRef; }
   Ref getRef() const { return ref; }
   AnnotSubtype getType() const { return type; }
   PDFRectangle *getRect() const { return rect; }
+  void getRect(double *x1, double *y1, double *x2, double *y2) const;
   GooString *getContents() const { return contents; }
-  Dict *getPageDict() const { return pageDict; }
+  int getPageNum() const { return page; }
   GooString *getName() const { return name; }
   GooString *getModified() const { return modified; }
   Guint getFlags() const { return flags; }
@@ -526,6 +507,9 @@ public:
 
   int getId() { return ref.num; }
 
+  // Check if point is inside the annot rectangle.
+  GBool inRect(double x, double y) const;
+
 private:
   void readArrayNum(Object *pdfArray, int key, double *value);
   // write vStr[i:j[ in appearBuf
@@ -534,14 +518,21 @@ private:
 
 
 protected:
-  void setColor(Array *a, GBool fill, int adjust);
+  virtual ~Annot();
+  void setColor(AnnotColor *color, GBool fill);
   void drawCircle(double cx, double cy, double r, GBool fill);
   void drawCircleTopLeft(double cx, double cy, double r);
   void drawCircleBottomRight(double cx, double cy, double r);
+  void createForm(double *bbox, GBool transparencyGroup, Object *resDict, Object *aStream);
+  void createResourcesDict(char *formName, Object *formStream, char *stateName,
+			   double opacity, char *blendMode, Object *resDict);
+  GBool isVisible(GBool printing);
 
   // Updates the field key of the annotation dictionary
   // and sets M to the current time
   void update(const char *key, Object *value);
+
+  int refCnt;
 
   Object annotObj;
   
@@ -551,7 +542,7 @@ protected:
 
   // optional data
   GooString *contents;              // Contents
-  Dict *pageDict;                   // P
+  int       page;                   // P
   GooString *name;                  // NM
   GooString *modified;              // M
   Guint flags;                      // F (must be a 32 bit unsigned int)
@@ -628,6 +619,7 @@ public:
   // The annotation takes the ownership of new_popup
   void setPopup(AnnotPopup *new_popup);
   void setLabel(GooString *new_label);
+  void setOpacity(double opacityA);
 
 protected:
   GooString *label;             // T            (Default autor)
@@ -670,6 +662,8 @@ public:
   AnnotText(XRef *xrefA, Dict *dict, Catalog *catalog, Object *obj);
   ~AnnotText();
 
+  virtual void draw(Gfx *gfx, GBool printing);
+
   // getters
   GBool getOpen() const { return open; }
   GooString *getIcon() const { return icon; }
@@ -697,89 +691,20 @@ private:
 
 class AnnotMovie: public Annot {
  public:
-  enum PosterType {
-    posterTypeNone,
-    posterTypeStream,
-    posterTypeFromMovie
-  };
-
-  enum RepeatMode {
-    repeatModeOnce,
-    repeatModeOpen,
-    repeatModeRepeat,
-    repeatModePalindrome
-  };
-
-  struct Time {
-    Time() { units_per_second = 0; }
-    Gulong units;
-    int units_per_second; // 0 : defined by movie
-  };
-
   AnnotMovie(XRef *xrefA, PDFRectangle *rect, Movie *movieA, Catalog *catalog);
   AnnotMovie(XRef *xrefA, Dict *dict, Catalog *catalog, Object *obj);
   ~AnnotMovie();
 
+  virtual void draw(Gfx *gfx, GBool printing);
+
   GooString* getTitle() { return title; }
-  GooString* getFileName() { return fileName; }
-  int getRotationAngle() { return rotationAngle; }
-
-  PosterType getPosterType() { return posterType; }
-  Stream* getPosterStream() { return posterStream; }
-
-  Time getStart() { return start; }
-  Time getDuration() { return duration; }
-  double getRate() { return rate; }
-  double getVolume() { return volume; }
-
-  GBool getShowControls() { return showControls; }
-  RepeatMode getRepeatMode() { return repeatMode; }
-  GBool getSynchronousPlay() { return synchronousPlay; }
-
-  GBool needFloatingWindow() { return hasFloatingWindow; }
-  GBool needFullscreen() { return isFullscreen; }
-  
-  
-  void getMovieSize(int& width, int& height);
-  void getZoomFactor(int& num, int& denum);
-  void getWindowPosition(double& x, double& y) { x = FWPosX; y = FWPosY; }
-
   Movie* getMovie() { return movie; }
 
  private:
   void initialize(XRef *xrefA, Catalog *catalog, Dict *dict);
 
   GooString* title;      // T
-  GooString* fileName;   // Movie/F
-
-  int width;             // Movie/Aspect
-  int height;            // Movie/Aspect
-  int rotationAngle;     // Movie/Rotate
-
-  PosterType posterType; // Movie/Poster
-  Stream* posterStream;
-
-  Time start;            // A/Start
-  Time duration;         // A/Duration
-  double rate;           // A/Rate
-  double volume;         // A/Volume
-  
-  GBool showControls;    // A/ShowControls
-  
-  RepeatMode repeatMode; // A/Mode
-  
-  GBool synchronousPlay; // A/Synchronous
-
-  // floating window
-  GBool hasFloatingWindow; 
-  unsigned short FWScaleNum; // A/FWScale
-  unsigned short FWScaleDenum;
-  GBool isFullscreen;
-
-  double FWPosX;         // A/FWPosition
-  double FWPosY; 
-
-  Movie* movie;
+  Movie* movie;          // Movie + A
 };
 
 
@@ -797,7 +722,7 @@ class AnnotScreen: public Annot {
   GooString* getTitle() { return title; }
 
   AnnotAppearanceCharacs *getAppearCharacs() { return appearCharacs; }
-  Object* getAction() { return &action; }
+  LinkAction* getAction() { return action; }
   Object* getAdditionActions() { return &additionAction; }
 
  private:
@@ -808,7 +733,7 @@ class AnnotScreen: public Annot {
 
   AnnotAppearanceCharacs* appearCharacs; // MK
 
-  Object action;                         // A
+  LinkAction *action;                    // A
   Object additionAction;                 // AA
 };
 
@@ -833,8 +758,7 @@ public:
   virtual void draw(Gfx *gfx, GBool printing);
 
   // getters
-  Dict *getActionDict() const { return actionDict; }
-  Object *getDest() { return &dest; }
+  LinkAction *getAction() const { return action; }
   AnnotLinkEffect getLinkEffect() const { return linkEffect; }
   Dict *getUriAction() const { return uriAction; }
   AnnotQuadrilaterals *getQuadrilaterals() const { return quadrilaterals; }
@@ -843,8 +767,7 @@ protected:
 
   void initialize(XRef *xrefA, Catalog *catalog, Dict *dict);
 
-  Dict *actionDict;                    // A
-  Object dest;                         // Dest
+  LinkAction *action;                  // A, Dest
   AnnotLinkEffect linkEffect;          // H          (Default I)
   Dict *uriAction;                     // PA
 
@@ -926,6 +849,8 @@ public:
   AnnotLine(XRef *xrefA, Dict *dict, Catalog *catalog, Object *obj);
   ~AnnotLine();
 
+  virtual void draw(Gfx *gfx, GBool printing);
+
   // getters
   AnnotLineEndingStyle getStartStyle() const { return startStyle; }
   AnnotLineEndingStyle getEndStyle() const { return endStyle; }
@@ -980,6 +905,8 @@ public:
   AnnotTextMarkup(XRef *xrefA, Dict *dict, Catalog *catalog, Object *obj);
   virtual ~AnnotTextMarkup();
 
+  virtual void draw(Gfx *gfx, GBool printing);
+
   AnnotQuadrilaterals *getQuadrilaterals() const { return quadrilaterals; }
 
 protected:
@@ -1020,6 +947,8 @@ public:
   AnnotGeometry(XRef *xrefA, PDFRectangle *rect, AnnotSubtype subType, Catalog *catalog);
   AnnotGeometry(XRef *xrefA, Dict *dict, Catalog *catalog, Object *obj);
   ~AnnotGeometry();
+
+  virtual void draw(Gfx *gfx, GBool printing);
 
   // getters
   AnnotColor *getInteriorColor() const { return interiorColor; }
@@ -1146,6 +1075,8 @@ public:
   AnnotFileAttachment(XRef *xrefA, Dict *dict, Catalog *catalog, Object *obj);
   ~AnnotFileAttachment();
 
+  virtual void draw(Gfx *gfx, GBool printing);
+
   // getters
   Object *getFile() { return &file; }
   GooString *getName() const { return name; }
@@ -1171,6 +1102,8 @@ public:
   AnnotSound(XRef *xrefA, PDFRectangle *rect, Sound *soundA, Catalog *catalog);
   AnnotSound(XRef *xrefA, Dict *dict, Catalog *catalog, Object *obj);
   ~AnnotSound();
+
+  virtual void draw(Gfx *gfx, GBool printing);
 
   // getters
   Sound *getSound() { return sound; }
@@ -1202,15 +1135,20 @@ public:
   };
 
   AnnotWidget(XRef *xrefA, Dict *dict, Catalog *catalog, Object *obj);
+  AnnotWidget(XRef *xrefA, Dict *dict, Catalog *catalog, Object *obj, FormField *fieldA);
   virtual ~AnnotWidget();
 
   virtual void draw(Gfx *gfx, GBool printing);
 
+  void drawBorder();
+  void drawFormFieldButton(GfxResources *resources, GooString *da);
+  void drawFormFieldText(GfxResources *resources, GooString *da);
+  void drawFormFieldChoice(GfxResources *resources, GooString *da);
   void generateFieldAppearance ();
 
   AnnotWidgetHighlightMode getMode() { return mode; }
   AnnotAppearanceCharacs *getAppearCharacs() { return appearCharacs; }
-  Dict *getAction() { return action; }
+  LinkAction *getAction() { return action; }
   Dict *getAdditionActions() { return additionActions; }
   Dict *getParent() { return parent; }
 
@@ -1218,28 +1156,26 @@ private:
 
   void initialize(XRef *xrefA, Catalog *catalog, Dict *dict);
 
-  void drawText(GooString *text, GooString *da, GfxFontDict *fontDict,
+  void drawText(GooString *text, GooString *da, GfxResources *resources,
 		GBool multiline, int comb, int quadding,
 		GBool txField, GBool forceZapfDingbats,
 		GBool password=false);
-  void drawListBox(GooString **text, GBool *selection,
-		   int nOptions, int topIdx,
-		   GooString *da, GfxFontDict *fontDict, GBool quadding);
+  void drawListBox(FormFieldChoice *fieldChoice,
+		   GooString *da, GfxResources *resources, int quadding);
   void layoutText(GooString *text, GooString *outBuf, int *i, GfxFont *font,
 		  double *width, double widthLimit, int *charCount,
 		  GBool noReencode);
   void writeString(GooString *str, GooString *appearBuf);
 
   Form *form;
-  FormWidget *widget;                     // FormWidget object for this annotation
+  FormField *field;                       // FormField object for this annotation
   AnnotWidgetHighlightMode mode;          // H  (Default I)
   AnnotAppearanceCharacs *appearCharacs;  // MK
-  Dict *action;                           // A
+  LinkAction *action;                     // A
   Dict *additionActions;                  // AA
   // inherited  from Annot
   // AnnotBorderBS border;                // BS
   Dict *parent;                           // Parent
-  GBool regen;
   GBool addDingbatsResource;
 };
 
@@ -1317,6 +1253,7 @@ public:
   // Iterate through list of annotations.
   int getNumAnnots() { return nAnnots; }
   Annot *getAnnot(int i) { return annots[i]; }
+  void appendAnnot(Annot *annot);
 
 private:
   Annot* createAnnot(XRef *xref, Dict* dict, Catalog *catalog, Object *obj);
@@ -1324,6 +1261,7 @@ private:
 
   Annot **annots;
   int nAnnots;
+  int size;
 };
 
 #endif

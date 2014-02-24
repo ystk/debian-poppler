@@ -1,4 +1,10 @@
-01_revert_abi_change.patch
-02_autohinting_abi_compatibility.patch
-03_CVE-2009-3938.patch
-04_security.patch
+ltmain-as-needed.diff
+upstream_cairo-use-correct-userfont-font-bbox.patch
+upstream_pdfinfo-decode-utf-16-surrogate-pairs.patch
+upstream_Change-nnnnnn-to-number.patch
+upstream_fix-GooString-insert.diff
+psoutputdev-initialize-vars.diff
+upstream_Fix-another-invalid-memory-access-in-1091.pdf.asan.7.patch
+upstream_Fix-invalid-memory-access-in-2030.pdf.asan.69.463.patch
+upstream_Fix-invalid-memory-access-in-1150.pdf.asan.8.69.patch
+upstream_Initialize-refLine-totally.patch

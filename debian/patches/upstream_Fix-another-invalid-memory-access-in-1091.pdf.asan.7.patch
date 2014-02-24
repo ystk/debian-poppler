@@ -1,0 +1,40 @@
+From 0388837f01bc467045164f9ddaff787000a8caaa Mon Sep 17 00:00:00 2001
+From: Albert Astals Cid <aacid@kde.org>
+Date: Thu, 10 Jan 2013 20:29:06 +0100
+Subject: [PATCH] Fix another invalid memory access in 1091.pdf.asan.72.42
+
+---
+ poppler/Stream.cc |   10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/poppler/Stream.cc b/poppler/Stream.cc
+index d118ddd..4cb3326 100644
+--- a/poppler/Stream.cc
++++ b/poppler/Stream.cc
+@@ -2132,7 +2132,8 @@ GBool CCITTFaxStream::isBinary(GBool last) {
+ 
+ // clip [-256,511] --> [0,255]
+ #define dctClipOffset 256
+-static Guchar dctClip[768];
++#define dctClipLength 768
++static Guchar dctClip[dctClipLength];
+ static int dctClipInit = 0;
+ 
+ // zig zag decode map
+@@ -3078,7 +3079,12 @@ void DCTStream::transformDataUnit(Gushort *quantTable,
+ 
+   // convert to 8-bit integers
+   for (i = 0; i < 64; ++i) {
+-    dataOut[i] = dctClip[dctClipOffset + 128 + ((dataIn[i] + 8) >> 4)];
++    const int ix = dctClipOffset + 128 + ((dataIn[i] + 8) >> 4);
++    if (unlikely(ix < 0 || ix >= dctClipLength)) {
++      dataOut[i] = 0;
++    } else {
++      dataOut[i] = dctClip[ix];
++    }
+   }
+ }
+ 
+-- 
+1.7.10.4
+

@@ -1,0 +1,31 @@
+From e14b6e9c13d35c9bd1e0c50906ace8e707816888 Mon Sep 17 00:00:00 2001
+From: Albert Astals Cid <aacid@kde.org>
+Date: Thu, 10 Jan 2013 20:52:02 +0100
+Subject: [PATCH] Fix invalid memory access in 2030.pdf.asan.69.463
+
+---
+ poppler/Function.cc |    6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+--- a/poppler/Function.cc
++++ b/poppler/Function.cc
+@@ -13,7 +13,7 @@
+ // All changes made under the Poppler project to this file are licensed
+ // under GPL version 2 or later
+ //
+-// Copyright (C) 2006, 2008-2010 Albert Astals Cid <aacid@kde.org>
++// Copyright (C) 2006, 2008-2010, 2013 Albert Astals Cid <aacid@kde.org>
+ // Copyright (C) 2006 Jeff Muizelaar <jeff@infidigm.net>
+ // Copyright (C) 2010 Christian Feuersänger <cfeuersaenger@googlemail.com>
+ // Copyright (C) 2011 Andrea Canciani <ranma42@gmail.com>
+@@ -1002,6 +1002,10 @@ void PSStack::copy(int n) {
+     error(-1, "Stack underflow in PostScript function");
+     return;
+   }
++  if (unlikely(sp - n > psStackSize)) {
++    error(-1, "Stack underflow in PostScript function");
++    return;
++  }
+   if (!checkOverflow(n)) {
+     return;
+   }

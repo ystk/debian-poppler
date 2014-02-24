@@ -166,7 +166,9 @@ int main( int argc, char **argv )
     }
   
     // output some meta-data
-    qDebug() << "    PDF Version: " << doc->pdfVersion();
+    int major = 0, minor = 0;
+    doc->getPdfVersion( &major, &minor );
+    qDebug() << "    PDF Version: " << qPrintable(QString::fromLatin1("%1.%2").arg(major).arg(minor));
     qDebug() << "          Title: " << doc->info("Title");
     qDebug() << "        Subject: " << doc->info("Subject");
     qDebug() << "         Author: " << doc->info("Author");
@@ -207,8 +209,11 @@ int main( int argc, char **argv )
     }
 
     Poppler::Page *page = doc->page(0);
-    qDebug() << "Page 1 size: " << page->pageSize().width()/72 << "inches x " << page->pageSize().height()/72 << "inches";
-    delete page;
+    if (page)
+    {
+        qDebug() << "Page 1 size: " << page->pageSize().width()/72 << "inches x " << page->pageSize().height()/72 << "inches";
+        delete page;
+    }
 
     if (argc == 2 || (argc == 3 && strcmp(argv[2], "-arthur") == 0) || (argc == 3 && strcmp(argv[2], "-textRects") == 0))
     {

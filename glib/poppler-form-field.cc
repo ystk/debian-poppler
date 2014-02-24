@@ -21,6 +21,12 @@
 #include "poppler.h"
 #include "poppler-private.h"
 
+/**
+ * SECTION:poppler-form-field
+ * @short_description: Form Field
+ * @title: PoppplerFormField
+ */
+
 typedef struct _PopplerFormFieldClass PopplerFormFieldClass;
 struct _PopplerFormFieldClass
 {
@@ -38,6 +44,11 @@ poppler_form_field_finalize (GObject *object)
     {
       g_object_unref (field->document);
       field->document = NULL;
+    }
+  if (field->action)
+    {
+      poppler_action_free (field->action);
+      field->action = NULL;
     }
   field->widget = NULL;
 
@@ -153,6 +164,35 @@ poppler_form_field_is_read_only (PopplerFormField *field)
   return field->widget->isReadOnly ();
 }
 
+/**
+ * poppler_form_field_get_action:
+ * @field: a #PopplerFormField
+ *
+ * Retrieves the action (#PopplerAction) that shall be
+ * performed when @field is activated, or %NULL
+ *
+ * Return value: (transfer none): the action to perform. The returned
+ *               object is owned by @field and should not be freed
+ *
+ * Since: 0.18
+ */
+PopplerAction *
+poppler_form_field_get_action (PopplerFormField *field)
+{
+  LinkAction *action;
+
+  if (field->action)
+    return field->action;
+
+  action = field->widget->getActivationAction();
+  if (!action)
+    return NULL;
+
+  field->action = _poppler_action_new (NULL, action, NULL);
+
+  return field->action;
+}
+
 /* Button Field */
 /**
  * poppler_form_field_button_get_button_type
@@ -212,6 +252,74 @@ poppler_form_field_button_set_state (PopplerFormField *field,
   g_return_if_fail (field->widget->getType () == formButton);
 
   static_cast<FormWidgetButton*>(field->widget)->setState ((GBool)state);
+}
+
+/**
+ * poppler_form_field_get_partial_name:
+ * @field: a #PopplerFormField
+ *
+ * Gets the partial name of @field.
+ *
+ * Return value: a new allocated string. It must be freed with g_free() when done.
+ *
+ * Since: 0.16
+ **/
+gchar*
+poppler_form_field_get_partial_name (PopplerFormField *field)
+{
+  GooString *tmp;
+
+  g_return_val_if_fail (POPPLER_IS_FORM_FIELD (field), NULL);
+
+  tmp = field->widget->getPartialName();
+
+  return tmp ? _poppler_goo_string_to_utf8 (tmp) : NULL;
+}
+
+/**
+ * poppler_form_field_get_mapping_name:
+ * @field: a #PopplerFormField
+ *
+ * Gets the mapping name of @field that is used when
+ * exporting interactive form field data from the document
+ *
+ * Return value: a new allocated string. It must be freed with g_free() when done.
+ *
+ * Since: 0.16
+ **/
+gchar*
+poppler_form_field_get_mapping_name (PopplerFormField *field)
+{
+  GooString *tmp;
+
+  g_return_val_if_fail (POPPLER_IS_FORM_FIELD (field), NULL);
+
+  tmp = field->widget->getMappingName();
+
+  return tmp ? _poppler_goo_string_to_utf8 (tmp) : NULL;
+}
+
+/**
+ * poppler_form_field_get_name:
+ * @field: a #PopplerFormField
+ *
+ * Gets the fully qualified name of @field. It's constructed by concatenating
+ * the partial field names of the field and all of its ancestors.
+ *
+ * Return value: a new allocated string. It must be freed with g_free() when done.
+ *
+ * Since: 0.16
+ **/
+gchar*
+poppler_form_field_get_name (PopplerFormField *field)
+{
+  GooString *tmp;
+
+  g_return_val_if_fail (POPPLER_IS_FORM_FIELD (field), NULL);
+
+  tmp = field->widget->getFullyQualifiedName();
+
+  return tmp ? _poppler_goo_string_to_utf8 (tmp) : NULL;
 }
 
 /* Text Field */
@@ -466,6 +574,7 @@ poppler_form_field_choice_get_item (PopplerFormField *field,
   GooString *tmp;
   
   g_return_val_if_fail (field->widget->getType () == formChoice, NULL);
+  g_return_val_if_fail (index >= 0 && index < poppler_form_field_choice_get_n_items (field), NULL);
 
   tmp = static_cast<FormWidgetChoice*>(field->widget)->getChoice (index);
   return tmp ? _poppler_goo_string_to_utf8 (tmp) : NULL;
@@ -485,6 +594,7 @@ poppler_form_field_choice_is_item_selected (PopplerFormField *field,
 					    gint              index)
 {
   g_return_val_if_fail (field->widget->getType () == formChoice, FALSE);
+  g_return_val_if_fail (index >= 0 && index < poppler_form_field_choice_get_n_items (field), FALSE);
 
   return static_cast<FormWidgetChoice*>(field->widget)->isSelected (index);
 }
@@ -501,6 +611,7 @@ poppler_form_field_choice_select_item (PopplerFormField *field,
 				       gint              index)
 {
   g_return_if_fail (field->widget->getType () == formChoice);
+  g_return_if_fail (index >= 0 && index < poppler_form_field_choice_get_n_items (field));
 
   static_cast<FormWidgetChoice*>(field->widget)->select (index);
 }
@@ -531,12 +642,13 @@ poppler_form_field_choice_toggle_item (PopplerFormField *field,
 				       gint              index)
 {
   g_return_if_fail (field->widget->getType () == formChoice);
+  g_return_if_fail (index >= 0 && index < poppler_form_field_choice_get_n_items (field));
 
   static_cast<FormWidgetChoice*>(field->widget)->toggle (index);
 }
 
 /**
- * poppler_form_field_choice_toggle_item:
+ * poppler_form_field_choice_set_text:
  * @field: a #PopplerFormField
  * @text: the new text
  *

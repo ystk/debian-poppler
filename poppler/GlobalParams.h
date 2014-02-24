@@ -13,14 +13,16 @@
 // All changes made under the Poppler project to this file are licensed
 // under GPL version 2 or later
 //
-// Copyright (C) 2005, 2007-2009 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2005, 2007-2010 Albert Astals Cid <aacid@kde.org>
 // Copyright (C) 2005 Jonathan Blandford <jrb@redhat.com>
 // Copyright (C) 2006 Takashi Iwai <tiwai@suse.de>
 // Copyright (C) 2006 Kristian Høgsberg <krh@redhat.com>
 // Copyright (C) 2007 Krzysztof Kowalczyk <kkowalczyk@gmail.com>
 // Copyright (C) 2009 Jonathan Kew <jonathan_kew@sil.org>
 // Copyright (C) 2009 Petr Gajdos <pgajdos@novell.com>
-// Copyright (C) 2009 William Bader <williambader@hotmail.com>
+// Copyright (C) 2009, 2011 William Bader <williambader@hotmail.com>
+// Copyright (C) 2010 Hib Eris <hib@hiberis.nl>
+// Copyright (C) 2011 Pino Toscano <pino@kde.org>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -37,9 +39,6 @@
 #include <assert.h>
 #include "poppler-config.h"
 #include <stdio.h>
-#ifndef _MSC_VER
-#include <fontconfig/fontconfig.h>
-#endif
 #include "goo/gtypes.h"
 #include "CharTypes.h"
 
@@ -169,7 +168,7 @@ public:
 
   void setBaseDir(char *dir);
 
-#ifdef _MSC_VER
+#if WITH_FONTCONFIGURATION_WIN32
   void setupBaseFonts(char *dir);
 #endif
 
@@ -198,6 +197,7 @@ public:
   GBool getPSPreload();
   GBool getPSOPI();
   GBool getPSASCIIHex();
+  GBool getPSBinary();
   GooString *getTextEncodingName();
   EndOfLineKind getTextEOL();
   GBool getTextPageBreaks();
@@ -218,6 +218,7 @@ public:
   GBool getPrintCommands();
   GBool getProfileCommands();
   GBool getErrQuiet();
+  double getSplashResolution();
 
   CharCodeToUnicode *getCIDToUnicode(GooString *collection);
   CharCodeToUnicode *getUnicodeToUnicode(GooString *fontName);
@@ -243,6 +244,7 @@ public:
   void setPSPreload(GBool preload);
   void setPSOPI(GBool opi);
   void setPSASCIIHex(GBool hex);
+  void setPSBinary(GBool binary);
   void setTextEncoding(char *encodingName);
   GBool setTextEOL(char *s);
   void setTextPageBreaks(GBool pageBreaks);
@@ -262,6 +264,7 @@ public:
   void setPrintCommands(GBool printCommandsA);
   void setProfileCommands(GBool profileCommandsA);
   void setErrQuiet(GBool errQuietA);
+  void setSplashResolution(double splashResolutionA);
 
   //----- security handlers
 
@@ -324,6 +327,7 @@ private:
 				//   memory
   GBool psOPI;			// generate PostScript OPI comments?
   GBool psASCIIHex;		// use ASCIIHex instead of ASCII85?
+  GBool psBinary;		// use binary instead of hex
   GooString *textEncoding;	// encoding (unicodeMap) to use for text
 				//   output
   EndOfLineKind textEOL;	// type of EOL marker to use for text
@@ -346,16 +350,13 @@ private:
   GBool printCommands;		// print the drawing commands
   GBool profileCommands;	// profile the drawing commands
   GBool errQuiet;		// suppress error messages?
+  double splashResolution;	// resolution when rasterizing images
 
   CharCodeToUnicodeCache *cidToUnicodeCache;
   CharCodeToUnicodeCache *unicodeToUnicodeCache;
   UnicodeMapCache *unicodeMapCache;
   CMapCache *cMapCache;
   
-#ifndef _MSC_VER
-  FcConfig *FCcfg;
-#endif
-
 #ifdef ENABLE_PLUGINS
   GList *plugins;		// list of plugins [Plugin]
   GList *securityHandlers;	// list of loaded security handlers

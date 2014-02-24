@@ -1,26 +1,22 @@
-add_definitions(-DG_LOG_DOMAIN=\"Poppler\" ${GLIB2_CFLAGS})
-
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_BINARY_DIR}
+  ${GLIB2_INCLUDE_DIRS}
+  ${CAIRO_INCLUDE_DIRS}
 )
-if (CAIRO_FOUND)
-  include_directories(${CAIRO_INCLUDES})
-  set (CAIRO_FEATURE "#define POPPLER_HAS_CAIRO 1")
-  add_definitions(${CAIRO_CFLAGS})
-else (CAIRO_FOUND)
-  set (CAIRO_FEATURE "#undef POPPLER_HAS_CAIRO")
-endif (CAIRO_FOUND)
-
-if (GDK_FOUND)
-  add_definitions(${GDK2_CFLAGS})
-endif (GDK_FOUND)
+add_definitions(
+  -DG_LOG_DOMAIN=\"Poppler\"
+  ${GLIB2_CFLAGS_OTHER}
+  ${CAIRO_CFLAGS}
+  ${POPPLER_GLIB_DISABLE_DEPRECATED}
+  ${POPPLER_GLIB_DISABLE_SINGLE_INCLUDES}
+)
 
 configure_file(poppler-features.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/poppler-features.h @ONLY)
 
-if (GTK_FOUND)
+if (GTK_FOUND AND BUILD_GTK_TESTS)
   add_subdirectory(demo)
-endif (GTK_FOUND)
+endif (GTK_FOUND AND BUILD_GTK_TESTS)
 
 set(poppler_glib_public_headers
   poppler-action.h
@@ -30,6 +26,9 @@ set(poppler_glib_public_headers
   poppler-attachment.h
   poppler-form-field.h
   poppler-annot.h
+  poppler-layer.h
+  poppler-movie.h
+  poppler-media.h
   poppler.h
 )
 
@@ -39,38 +38,22 @@ add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.h
   COMMAND ${GLIB2_MKENUMS}
   ARGS
-    --fhead \"\#ifndef __POPPLER_TYPE_ENUMS_H__\\n\"
-    --fhead \"\#define __POPPLER_TYPE_ENUMS_H__ 1\\n\\n\"
-    --fhead \"\#include <glib-object.h>\\n\\n\"
-    --fhead \"G_BEGIN_DECLS\\n\\n\"
-    --ftail \"G_END_DECLS\\n\\n\"
-    --ftail \"\#endif /* __POPPLER_TYPE_ENUMS_H__ */\\n\"
-    --fprod \"\\n/* --- @filename@ --- */\"
-    --eprod \"\#define POPPLER_TYPE_@ENUMSHORT@ \(@enum_name@_get_type\(\)\)\\n\"
-    --eprod \"GType @enum_name@_get_type \(void\) G_GNUC_CONST\;\\n\"
+    --template poppler-enums.h.template
     ${poppler_glib_public_headers} > ${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.h
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   DEPENDS ${poppler_glib_public_headers}
+          ${CMAKE_CURRENT_SOURCE_DIR}/poppler-enums.h.template
 )
 
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.c
   COMMAND ${GLIB2_MKENUMS}
   ARGS
-    --fhead \"\#include \\"poppler-enums.h\\"\\n\\n\"
-    --fprod \"\\n/* enumerations from \\"@filename@\\" */\"
-    --fprod \"\\n\#include \\"@filename@\\"\"
-    --vhead \"static const G@Type@Value _@enum_name@_values[] = {\"
-    --vprod \"  { @VALUENAME@, \\"@VALUENAME@\\", \\"@valuenick@\\" },\"
-    --vtail \"  { 0, NULL, NULL }\\n}\;\\n\\n\"
-    --vtail \"GType\\n@enum_name@_get_type \(void\)\\n{\\n\"
-    --vtail \"  static GType type = 0\;\\n\\n\"
-    --vtail \"  if \(G_UNLIKELY \(type == 0\)\)\\n\"
-    --vtail \"    type = g_\@type\@_register_static \(\\"@EnumName@\\", _@enum_name@_values\)\;\\n\\n\"
-    --vtail \"  return type\;\\n}\\n\\n\"
+    --template poppler-enums.c.template
     ${poppler_glib_public_headers} > ${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.c
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   DEPENDS ${poppler_glib_public_headers} ${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/poppler-enums.c.template
 )
 
 
@@ -83,21 +66,19 @@ set(poppler_glib_SRCS
   poppler-form-field.cc
   poppler-annot.cc
   poppler-layer.cc
+  poppler-movie.cc
+  poppler-media.cc
   poppler.cc
-  ${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.c
 )
-if (CAIRO_FOUND)
-  set(poppler_glib_SRCS ${poppler_glib_SRCS}
-    ${CMAKE_SOURCE_DIR}/poppler/CairoFontEngine.cc
-    ${CMAKE_SOURCE_DIR}/poppler/CairoOutputDev.cc
-  )
-endif (CAIRO_FOUND)
-add_library(poppler-glib SHARED ${poppler_glib_SRCS})
-set_target_properties(poppler-glib PROPERTIES VERSION 4.0.0 SOVERSION 4)
-target_link_libraries(poppler-glib poppler ${GLIB2_LIBRARIES})
-if (CAIRO_FOUND)
-  target_link_libraries(poppler-glib ${CAIRO_LIBRARIES})
-endif (CAIRO_FOUND)
+set(poppler_glib_generated_SRCS
+  ${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.c
+  ${CMAKE_SOURCE_DIR}/poppler/CairoFontEngine.cc
+  ${CMAKE_SOURCE_DIR}/poppler/CairoOutputDev.cc
+  ${CMAKE_SOURCE_DIR}/poppler/CairoRescaleBox.cc
+)
+add_library(poppler-glib SHARED ${poppler_glib_SRCS} ${poppler_glib_generated_SRCS})
+set_target_properties(poppler-glib PROPERTIES VERSION 8.2.0 SOVERSION 8)
+target_link_libraries(poppler-glib poppler ${GLIB2_LIBRARIES} ${CAIRO_LIBRARIES} ${FREETYPE_LIBRARIES})
 install(TARGETS poppler-glib RUNTIME DESTINATION bin LIBRARY DESTINATION lib${LIB_SUFFIX} ARCHIVE DESTINATION lib${LIB_SUFFIX})
 
 install(FILES
@@ -106,12 +87,43 @@ install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/poppler-features.h
   DESTINATION include/poppler/glib)
 
+set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.h ${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.c"
+)
 
-if (GDK_FOUND)
-  set(test_poppler_glib_SRCS
-    test-poppler-glib.cc
+
+macro(_list_prefix _outvar _listvar _prefix)
+  set(${_outvar})
+  foreach(_item IN LISTS ${_listvar})
+    list(APPEND ${_outvar} ${_prefix}${_item})
+  endforeach()
+endmacro(_list_prefix)
+
+# GObject Introspection
+if (HAVE_INTROSPECTION)
+  include(GObjectIntrospectionMacros)
+  set(INTROSPECTION_GIRS)
+  set(INTROSPECTION_SCANNER_ARGS "--add-include-path=${CMAKE_CURRENT_SOURCE_DIR}")
+  set(INTROSPECTION_COMPILER_ARGS "--includedir=${CMAKE_CURRENT_SOURCE_DIR}")
+
+  set(introspection_files ${poppler_glib_SRCS} ${poppler_glib_public_headers})
+  set(Poppler_0_18_gir "poppler-glib")
+  set(Poppler_0_18_gir_INCLUDES GObject-2.0 cairo-1.0)
+  get_directory_property(_tmp_includes INCLUDE_DIRECTORIES)
+  _list_prefix(_includes _tmp_includes "-I")
+  set(Poppler_0_18_gir_CFLAGS ${_includes})
+  set(Poppler_0_18_gir_LIBS poppler-glib)
+  _list_prefix(_abs_introspection_files introspection_files "${CMAKE_CURRENT_SOURCE_DIR}/")
+  list(APPEND _abs_introspection_files
+    ${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.c
+    ${CMAKE_CURRENT_BINARY_DIR}/poppler-enums.h
+    ${CMAKE_CURRENT_BINARY_DIR}/poppler-features.h
   )
-  poppler_add_test(test-poppler-glib BUILD_GTK_TESTS ${test_poppler_glib_SRCS})
-  target_link_libraries(test-poppler-glib poppler-glib ${GDK2_LIBRARIES})
-endif (GDK_FOUND)
+  set(Poppler_0_18_gir_FILES ${_abs_introspection_files})
+  set(Poppler_0_18_gir_SCANNERFLAGS --c-include poppler.h)
+  set(Poppler_0_18_gir_EXPORT_PACKAGES poppler-glib)
 
+  list(APPEND INTROSPECTION_GIRS Poppler-0.18.gir)
+
+  gir_add_introspections(INTROSPECTION_GIRS)
+endif ()

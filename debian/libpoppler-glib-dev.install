@@ -1,6 +1,6 @@
-debian/tmp/usr/share/gtk-doc/html/poppler/ usr/share/doc/libpoppler-glib-dev/html/
-debian/tmp/usr/include/poppler/glib/
-debian/tmp/usr/lib/libpoppler-glib.a
-debian/tmp/usr/lib/libpoppler-glib.so
-debian/tmp/usr/lib/pkgconfig/poppler-glib.pc
-glib/.libs/test-poppler-glib usr/lib/poppler
+usr/share/gtk-doc/html/poppler/ usr/share/doc/libpoppler-glib-dev/html/
+usr/include/poppler/glib/
+usr/lib/*/libpoppler-glib.a
+usr/lib/*/libpoppler-glib.so
+usr/lib/*/pkgconfig/poppler-glib.pc
+usr/share/gir-1.0/Poppler-0.18.gir

@@ -131,10 +131,12 @@ static void
 pgd_form_field_view_set_field (GtkWidget        *field_view,
 			       PopplerFormField *field)
 {
-	GtkWidget  *alignment;
-	GtkWidget  *table;
-	GEnumValue *enum_value;
-	gint        row = 0;
+	GtkWidget     *alignment;
+	GtkWidget     *table;
+        PopplerAction *action;
+	GEnumValue    *enum_value;
+	gchar         *text;
+	gint           row = 0;
 
 	alignment = gtk_bin_get_child (GTK_BIN (field_view));
 	if (alignment) {
@@ -149,9 +151,35 @@ pgd_form_field_view_set_field (GtkWidget        *field_view,
 	if (!field)
 		return;
 
-	table = gtk_table_new (10, 2, FALSE);
+	table = gtk_table_new (13, 2, FALSE);
 	gtk_table_set_col_spacings (GTK_TABLE (table), 6);
 	gtk_table_set_row_spacings (GTK_TABLE (table), 6);
+
+	text = poppler_form_field_get_name (field);
+	if (text) {
+		pgd_table_add_property (GTK_TABLE (table), "<b>Name:</b>", text, &row);
+		g_free (text);
+	}
+	text = poppler_form_field_get_partial_name (field);
+	if (text) {
+		pgd_table_add_property (GTK_TABLE (table), "<b>Partial Name:</b>", text, &row);
+		g_free (text);
+	}
+	text = poppler_form_field_get_mapping_name (field);
+	if (text) {
+		pgd_table_add_property (GTK_TABLE (table), "<b>Mapping Name:</b>", text, &row);
+		g_free (text);
+	}
+
+        action = poppler_form_field_get_action (field);
+        if (action) {
+                GtkWidget *action_view;
+
+                action_view = pgd_action_view_new (NULL);
+                pgd_action_view_set_action (action_view, action);
+                pgd_table_add_property_with_custom_widget (GTK_TABLE (table), "<b>Action:</b>", action_view, &row);
+                gtk_widget_show (action_view);
+        }
 
 	switch (poppler_form_field_get_field_type (field)) {
 	case POPPLER_FORM_FIELD_BUTTON:
@@ -161,9 +189,7 @@ pgd_form_field_view_set_field (GtkWidget        *field_view,
 		pgd_table_add_property (GTK_TABLE (table), "<b>Button State:</b>",
 					poppler_form_field_button_get_state (field) ? "Active" : "Inactive", &row);
 		break;
-	case POPPLER_FORM_FIELD_TEXT: {
-		gchar *text;
-		
+	case POPPLER_FORM_FIELD_TEXT:
 		enum_value = g_enum_get_value ((GEnumClass *) g_type_class_ref (POPPLER_TYPE_FORM_TEXT_TYPE),
 					       poppler_form_field_text_get_text_type (field));
 		pgd_table_add_property (GTK_TABLE (table), "<b>Text Type:</b>", enum_value->value_name, &row);
@@ -184,11 +210,10 @@ pgd_form_field_view_set_field (GtkWidget        *field_view,
 					poppler_form_field_text_is_rich_text (field) ? "Yes" : "No", &row);
 		pgd_table_add_property (GTK_TABLE (table), "<b>Pasword type:</b>",
 					poppler_form_field_text_is_password (field) ? "Yes" : "No", &row);
-	}
 		break;
 	case POPPLER_FORM_FIELD_CHOICE: {
-		gchar *text, *item;
-		gint   selected;
+		gchar *item;
+		gint   selected = -1;
 		
 		enum_value = g_enum_get_value ((GEnumClass *) g_type_class_ref (POPPLER_TYPE_FORM_CHOICE_TYPE),
 					       poppler_form_field_choice_get_choice_type (field));
@@ -208,7 +233,7 @@ pgd_form_field_view_set_field (GtkWidget        *field_view,
 
 		pgd_form_field_view_add_choice_items (GTK_TABLE (table), field, &selected, &row);
 
-		if (poppler_form_field_choice_get_n_items (field) > selected) {
+		if (selected >= 0 && poppler_form_field_choice_get_n_items (field) > selected) {
 			item = poppler_form_field_choice_get_item (field, selected);
 			text = g_strdup_printf ("%d (%s)", selected, item);
 			g_free (item);

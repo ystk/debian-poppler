@@ -1,5 +1,5 @@
 m4_define([poppler_version_major],[0])
-m4_define([poppler_version_minor],[12])
+m4_define([poppler_version_minor],[18])
 m4_define([poppler_version_micro],[4])
 m4_define([poppler_version],[poppler_version_major.poppler_version_minor.poppler_version_micro])
 
@@ -7,9 +7,10 @@ AC_PREREQ(2.59)
 AC_INIT([poppler],[poppler_version],[https://bugs.freedesktop.org/enter_bug.cgi?product=poppler])
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign])
-m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([no])])
+m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 AM_CONFIG_HEADER(config.h)
 AM_CONFIG_HEADER(poppler/poppler-config.h)
+AC_C_BIGENDIAN
 
 dnl ##### Initialize libtool.
 AC_LIBTOOL_WIN32_DLL
@@ -25,10 +26,16 @@ AC_PROG_CC_STDC
 #  CXX="gcc"
 #fi
 AC_PROG_CXX
+if test "x$GXX" = "xyes"; then
+  case "$host_os" in
+    cygwin* | mingw*)
+    ;;
+    *)
+      CXXFLAGS="$CXXFLAGS -ansi"
+    ;;
+  esac
+fi
 AC_PROG_INSTALL
-AC_CHECK_FUNC(gettimeofday, AC_DEFINE(HAVE_GETTIMEOFDAY, 1, [Defines if gettimeofday is available on your system]))
-AC_CHECK_FUNC(localtime_r, AC_DEFINE(HAVE_LOCALTIME_R, 1, [Defines if localtime_r is available on your system]))
-AC_CHECK_FUNC(gmtime_r, AC_DEFINE(HAVE_GMTIME_R, 1, [Defines if gmtime_r is available on your system]))
 
 dnl ##### Check for pkgconfig
 PKG_PROG_PKG_CONFIG
@@ -47,6 +54,7 @@ case "$host_os" in
     create_shared_lib="-no-undefined"
   ;;
   mingw*)
+    os_win32=yes
     win32_libs="-lgdi32"
     create_shared_lib="-no-undefined"
     auto_import_flags="-Wl,--enable-auto-import"
@@ -67,24 +75,55 @@ AC_ARG_ENABLE(xpdf-headers,
               enable_xpdf_headers="no")
 AM_CONDITIONAL(ENABLE_XPDF_HEADERS, test x$enable_xpdf_headers = xyes)
 
+AC_ARG_ENABLE(single-precision,
+[  --enable-single-precision     use single precision arithmetic (instead of double precision) in the Splash backend],
+AC_DEFINE(USE_FLOAT,      [1], [Use single precision arithmetic in the Splash backend]))
+
 AC_ARG_ENABLE(fixedpoint,
-[  --enable-fixedpoint     use fixed point (instead of floating point) arithmetic],
-AC_DEFINE(USE_FIXEDPOINT, [1], [Use fixed point arithmetic]))
+[  --enable-fixedpoint     use fixed point (instead of double precision) arithmetic in the Splash backend],
+AC_DEFINE(USE_FIXEDPOINT, [1], [Use fixed point arithmetic in the Splash backend]))
+
+dnl Relocation support
+AC_ARG_ENABLE(relocatable,
+    AC_HELP_STRING([--disable-relocatable],
+                   [Hardcode the poppler library location (on Windows).]),
+    enable_relocatable=$enableval,
+    [if test x$os_win32 = xyes; then
+         # default to yes on native Windows.
+         enable_relocatable="yes"
+     else
+         # default to no everywhere else.
+         enable_relocatable="no"
+     fi
+    ]
+)
+
+if test x$enable_relocatable = xyes; then
+    if test x$os_win32 = xyes; then
+     AC_DEFINE([ENABLE_RELOCATABLE],
+               [1],[Do not hardcode the library location])
+    else
+        AC_MSG_ERROR(
+               [Invalid setting for relocatable, only supported on windows])
+
+    fi
+fi
 
 AC_DEFINE_DIR(POPPLER_DATADIR, "{datarootdir}/poppler", [Poppler data dir])
 
 dnl ##### Checks for header files.
 AC_PATH_XTRA
 AC_HEADER_DIRENT
-
-AC_ARG_ENABLE(exceptions,
-	      [  --enable-exceptions     use C++ exceptions],
-	      AC_DEFINE([USE_EXCEPTIONS], [1], [Throw exceptions to deal with not enough memory and similar problems]))
+AC_CHECK_HEADERS([stdint.h])
 
 dnl ##### Switch over to C++.  This will make the checks below a little
 dnl ##### bit stricter (requiring function prototypes in include files).
 dnl ##### (99% of xpdf is written in C++.)
 AC_LANG_CPLUSPLUS
+
+AC_CHECK_DECL(gettimeofday, [AC_CHECK_FUNC(gettimeofday, AC_DEFINE(HAVE_GETTIMEOFDAY, 1, [Defines if gettimeofday is available on your system]))],[],[#include <sys/time.h>])
+AC_CHECK_FUNC(localtime_r, AC_DEFINE(HAVE_LOCALTIME_R, 1, [Defines if localtime_r is available on your system]))
+AC_CHECK_FUNC(gmtime_r, AC_DEFINE(HAVE_GMTIME_R, 1, [Defines if gmtime_r is available on your system]))
 
 dnl ##### Check for extra libraries needed by X.  (LynxOS needs this.)
 AC_CHECK_FUNC(gethostbyname)
@@ -129,12 +168,51 @@ if test x$enable_libopenjpeg = xyes; then
   LIBOPENJPEG_LIBS="-lopenjpeg"
   AC_SUBST(LIBOPENJPEG_LIBS)
   AC_DEFINE(ENABLE_LIBOPENJPEG)
+  AC_TRY_COMPILE([
+#include <openjpeg.h>
+], [
+  int foo = OPJ_DPARAMETERS_IGNORE_PCLR_CMAP_CDEF_FLAG;
+], have_openjpeg_flag="yes", am_cv_proto_iconv_arg1="no")
+  if test x$have_openjpeg_flag = xyes; then
+    AC_DEFINE(WITH_OPENJPEG_IGNORE_PCLR_CMAP_CDEF_FLAG, 1, [OpenJPEG with the OPJ_DPARAMETERS_IGNORE_PCLR_CMAP_CDEF_FLAG flag.])
+  fi
 fi
 
 AM_CONDITIONAL(BUILD_LIBOPENJPEG, test x$enable_libopenjpeg = xyes)
 AH_TEMPLATE([ENABLE_LIBOPENJPEG],
 	    [Use libopenjpeg instead of builtin jpeg2000 decoder.])
 
+dnl ##### Test for libtiff
+AC_ARG_ENABLE(libtiff,
+		AC_HELP_STRING([--disable-libtiff],
+				[Don't build against libtiff.]),
+		enable_libtiff=$enableval,
+		enable_libtiff="try")
+
+if test x$enable_libtiff = xyes; then
+  AC_CHECK_LIB([tiff], [TIFFOpen],,
+		AC_MSG_ERROR("*** libtiff library not found ***"))
+  AC_CHECK_HEADERS([tiffio.h],,
+		AC_MSG_ERROR("*** libtiff headers not found ***"))
+elif test x$enable_libtiff = xtry; then
+  AC_CHECK_LIB([tiff], [TIFFOpen],
+		[enable_libtiff="yes"],
+		[enable_libtiff="no"])
+  AC_CHECK_HEADERS([tiffio.h],,
+		[enable_libtiff="no"])
+fi
+
+if test x$enable_libtiff = xyes; then
+  LIBTIFF_LIBS="-ltiff"
+  AC_SUBST(LIBTIFF_LIBS)
+  AC_DEFINE(ENABLE_LIBTIFF)
+fi
+
+AM_CONDITIONAL(BUILD_LIBTIFF, test x$enable_libtiff = xyes)
+AH_TEMPLATE([ENABLE_LIBTIFF], [Build against libtiff.])
+if test x$enable_libtiff = xyes; then
+  AC_DEFINE(ENABLE_LIBTIFF, 1, [Build against libtiff.])
+fi
 
 dnl ##### Checks for library functions.
 AC_CHECK_FUNCS(popen mkstemp mkstemps)
@@ -179,6 +257,21 @@ AM_CONDITIONAL(BUILD_ZLIB, test x$enable_zlib = xyes)
 AH_TEMPLATE([ENABLE_ZLIB],
 	    [Use zlib instead of builtin zlib decoder.])
 
+dnl Test for libcurl
+AC_ARG_ENABLE(libcurl,
+	      AC_HELP_STRING([--enable-libcurl],
+	                     [Build with libcurl based HTTP support.]),
+              enable_libcurl=$enableval,
+              enable_libcurl="no")
+
+if test x$enable_libcurl = xyes; then
+  PKG_CHECK_MODULES(LIBCURL, libcurl)
+  AC_DEFINE(ENABLE_LIBCURL, 1, [Build against libcurl.])
+  AC_DEFINE(POPPLER_HAS_CURL_SUPPORT, 1,
+     [Support for curl based doc builder is compiled in.])
+fi
+
+AM_CONDITIONAL(BUILD_LIBCURL, test x$enable_libcurl = xyes)
 
 dnl Test for libjpeg
 AC_ARG_ENABLE(libjpeg,
@@ -197,16 +290,20 @@ AH_TEMPLATE([ENABLE_LIBJPEG],
 dnl Test for libpng
 AC_ARG_ENABLE(libpng,
 	      AC_HELP_STRING([--disable-libpng],
-	                     [Don't build against libpng.]),
+	                     [Do not build against libpng.]),
               enable_libpng=$enableval,
               enable_libpng="try")
+
 if test x$enable_libpng != xno; then
-  POPPLER_FIND_PNG
+  PKG_CHECK_MODULES(LIBPNG, libpng, [enable_libpng="yes"],
+      [enable_libpng="no"])
+fi
+
+if test x$enable_libpng = xyes; then
+  AC_DEFINE(ENABLE_LIBPNG, 1, [Build against libpng.])
 fi
 
 AM_CONDITIONAL(BUILD_LIBPNG, test x$enable_libpng = xyes)
-AH_TEMPLATE([ENABLE_LIBPNG],
-            [Build against libpng.])
 
 dnl Check for freetype headers
 FREETYPE_LIBS=
@@ -235,7 +332,42 @@ fi
 AC_SUBST(FREETYPE_CFLAGS)
 AC_SUBST(FREETYPE_LIBS)
 
-PKG_CHECK_MODULES(FONTCONFIG, fontconfig >= 2.0.0)
+AC_MSG_CHECKING([which font configuration to use])
+AC_ARG_WITH([font_configuration],
+   [AS_HELP_STRING([--with-font-configuration=fontconfig|win32],
+                   [Select font configuration backend])],
+   [],
+   [if test x$os_win32 = xyes; then
+        # default to win32 on native Windows.
+        with_font_configuration=win32
+    else
+        # default to fontconig everywhere else.
+        with_font_configuration=fontconfig
+    fi
+   ]
+)
+AC_MSG_RESULT([$with_font_configuration])
+
+case $with_font_configuration in
+  win32)
+     AC_DEFINE([WITH_FONTCONFIGURATION_WIN32],
+               [1],[Use win32 font configuration backend])
+     # Set the minimum required Internet Explorer version to 5.0
+     CPPFLAGS="$CPPFLAGS -D_WIN32_IE=0x0500"
+     ;;
+  fontconfig)
+     AC_DEFINE([WITH_FONTCONFIGURATION_FONTCONFIG],
+               [1],[Use fontconfig font configuration backend])
+     PKG_CHECK_MODULES(FONTCONFIG, fontconfig >= 2.0.0)
+     ;;
+  *)
+     AC_MSG_ERROR(
+               [Invalid font configuration setting: $with_font_configuration])
+     ;;
+esac
+
+AM_CONDITIONAL(BUILD_WITH_WIN32_FONTCONFIGURATION,
+               test x$with_font_configuration = xwin32)
 
 AC_ARG_ENABLE(splash-output,
               AC_HELP_STRING([--disable-splash-output],
@@ -247,7 +379,7 @@ if test x$enable_splash_output = xyes; then
   AC_DEFINE(HAVE_SPLASH)
 fi
 
-CAIRO_VERSION="1.8.4"
+CAIRO_VERSION="1.10.0"
 AC_SUBST(CAIRO_VERSION)
 AC_ARG_ENABLE(cairo-output,
               AC_HELP_STRING([--disable-cairo-output],
@@ -255,9 +387,9 @@ AC_ARG_ENABLE(cairo-output,
               enable_cairo_output=$enableval,
               enable_cairo_output="try")
 if test x$enable_cairo_output = xyes; then
-  PKG_CHECK_MODULES(CAIRO, cairo >= $CAIRO_VERSION)
+  PKG_CHECK_MODULES(CAIRO, cairo >= $CAIRO_VERSION cairo-ft >= $CAIRO_VERSION)
 elif test x$enable_cairo_output = xtry; then
-  PKG_CHECK_MODULES(CAIRO, cairo >= $CAIRO_VERSION,
+  PKG_CHECK_MODULES(CAIRO, cairo >= $CAIRO_VERSION cairo-ft >= $CAIRO_VERSION,
                     [enable_cairo_output="yes"],
                     [enable_cairo_output="no"])
 fi
@@ -268,34 +400,20 @@ AC_SUBST(CAIRO_LIBS)
 AM_CONDITIONAL(BUILD_CAIRO_OUTPUT, test x$enable_cairo_output = xyes)
 AH_TEMPLATE([HAVE_CAIRO], [Use cairo for rendering.])
 if test x$enable_cairo_output = xyes; then
+  PDFTOCAIRO_DEPS="cairo cairo-ft"
+  dnl Check for optional cairo backends used by pdftocairo
+  PKG_CHECK_EXISTS(cairo-pdf, [PDFTOCAIRO_DEPS="$PDFTOCAIRO_DEPS cairo-pdf"], [])
+  PKG_CHECK_EXISTS(cairo-ps,  [PDFTOCAIRO_DEPS="$PDFTOCAIRO_DEPS cairo-ps"],  [])
+  PKG_CHECK_EXISTS(cairo-svg, [PDFTOCAIRO_DEPS="$PDFTOCAIRO_DEPS cairo-svg"], [])
+
+  PKG_CHECK_MODULES(PDFTOCAIRO, $PDFTOCAIRO_DEPS)
+  AC_SUBST(PDFTOCAIRO_CFLAGS)
+  AC_SUBST(PDFTOCAIRO_LIBS)
+
   AC_DEFINE(HAVE_CAIRO)
   CAIRO_FEATURE="#define POPPLER_HAS_CAIRO 1"
   CAIRO_REQ="cairo"
   AC_CHECK_HEADERS(fcntl.h sys/mman.h sys/stat.h)
-  AC_LANG_PUSH([C])
-  _SAVE_CFLAGS=$CFLAGS
-  _SAVE_LIBS=$LIBS
-  CFLAGS="$CFLAGS $CAIRO_CFLAGS"
-  LIBS="$LIBS $CAIRO_LIBS"
-  AC_CACHE_CHECK([for cairo blend modes support],
-                 ac_cv_cairo_has_blend_modes,
-		 [AC_COMPILE_IFELSE(
-		   [AC_LANG_SOURCE([[
-#include <cairo.h>
-int main() {
-  cairo_t *cr;
-  cairo_set_operator(cr, CAIRO_OPERATOR_MULTIPLY);
-  return 0;
-}
-                   ]])],
-		   [ac_cv_cairo_has_blend_modes="yes"],
-                   [ac_cv_cairo_has_blend_modes="no"])])
-  CFLAGS=$_SAVE_CFLAGS
-  LIBS=$_SAVE_LIBS
-  AC_LANG_POP([C])
-  if test "$ac_cv_cairo_has_blend_modes" = "yes"; then
-    AC_DEFINE(CAIRO_HAS_BLEND_MODES, [1], [Whether cairo has blend modes support])
-  fi
 else
   CAIRO_FEATURE="#undef POPPLER_HAS_CAIRO"
   CAIRO_REQ=""
@@ -303,93 +421,46 @@ fi
 AC_SUBST(CAIRO_FEATURE)
 AC_SUBST(CAIRO_REQ)
 
-POPPLER_GLIB_DISABLE_DEPRECATED=""
-POPPLER_GLIB_DISABLE_SINGLE_INCLUDES=""
+found_introspection=no
+if test x$enable_cairo_output = xyes; then
+  POPPLER_GLIB_DISABLE_DEPRECATED=""
+  POPPLER_GLIB_DISABLE_SINGLE_INCLUDES=""
 
-GLIB_REQUIRED=2.6
-AC_ARG_ENABLE(poppler-glib,
-              AC_HELP_STRING([--disable-poppler-glib],
-	                     [Don't compile poppler glib wrapper.]),
-              enable_poppler_glib=$enableval,
-              enable_poppler_glib="try")
-if test x$enable_poppler_glib = xyes; then
-  PKG_CHECK_MODULES(POPPLER_GLIB, glib-2.0 >= $GLIB_REQUIRED gobject-2.0 >= $GLIB_REQUIRED)
-elif test x$enable_poppler_glib = xtry; then
-  PKG_CHECK_MODULES(POPPLER_GLIB, glib-2.0 >= $GLIB_REQUIRED gobject-2.0 >= $GLIB_REQUIRED, 
-                    [enable_poppler_glib="yes"],
-                    [enable_poppler_glib="no"])
-fi
-if test x$enable_poppler_glib = xyes; then
-  AC_PATH_PROG([GLIB_MKENUMS],[glib-mkenums])
-  POPPLER_GLIB_DISABLE_DEPRECATED="$POPPLER_GLIB_DISABLE_DEPRECATED -DG_DISABLE_DEPRECATED"
-  POPPLER_GLIB_DISABLE_SINGLE_INCLUDES="$POPPLER_GLIB_DISABLE_SINGLE_INCLUDES -DG_DISABLE_SINGLE_INCLUDES"
+  GLIB_REQUIRED=2.18
+  AC_SUBST(GLIB_REQUIRED)
+  AC_ARG_ENABLE(poppler-glib,
+	        AC_HELP_STRING([--disable-poppler-glib],
+		               [Don't compile poppler glib wrapper.]),
+              		       enable_poppler_glib=$enableval,
+			       enable_poppler_glib="try")
+  if test x$enable_poppler_glib = xyes; then
+    PKG_CHECK_MODULES(POPPLER_GLIB, glib-2.0 >= $GLIB_REQUIRED gobject-2.0 >= $GLIB_REQUIRED cairo >= $CAIRO_VERSION)
+  elif test x$enable_poppler_glib = xtry; then
+    PKG_CHECK_MODULES(POPPLER_GLIB, glib-2.0 >= $GLIB_REQUIRED gobject-2.0 >= $GLIB_REQUIRED cairo >= $CAIRO_VERSION,
+                      [enable_poppler_glib="yes"],
+                      [enable_poppler_glib="no"])
+  fi
+  if test x$enable_poppler_glib = xyes; then
+    # Check for introspection
+    GOBJECT_INTROSPECTION_CHECK([0.6.7])
+
+    AC_PATH_PROG([GLIB_MKENUMS],[glib-mkenums])
+    POPPLER_GLIB_DISABLE_DEPRECATED="$POPPLER_GLIB_DISABLE_DEPRECATED -DG_DISABLE_DEPRECATED"
+    POPPLER_GLIB_DISABLE_SINGLE_INCLUDES="$POPPLER_GLIB_DISABLE_SINGLE_INCLUDES -DG_DISABLE_SINGLE_INCLUDES"
+  fi
+else
+  if test x$enable_poppler_glib = xyes; then
+    AC_MSG_ERROR("Cairo output is required to build glib frontend")
+  fi
+  enable_poppler_glib="no"
 fi
 AM_CONDITIONAL(BUILD_POPPLER_GLIB, test x$enable_poppler_glib = xyes)
-
-GTK_DOC_CHECK([1.0])
-
-dnl
-dnl GDK
-dnl
-AC_ARG_ENABLE(gdk,
-              AC_HELP_STRING([--disable-gdk],
-	                     [Compile without gdk.]),
-              enable_gdk=$enableval,
-	      enable_gdk="try")
-
-if test x$enable_poppler_glib = xyes; then
-  if test x$enable_gdk = xyes; then
-    PKG_CHECK_MODULES(GDK, gdk-2.0)
-  elif test x$enable_gdk = xtry; then
-    if test x$enable_splash_output = xyes; then
-      PKG_CHECK_MODULES(GDK, gdk-2.0,
-                        [enable_gdk="yes"],
-                        [enable_gdk="no"])
-    elif test x$enable_cairo_output = xyes; then
-      PKG_CHECK_MODULES(GDK, gdk-2.0,
-                        [enable_gdk="yes"],
-			[enable_gdk="no"])
-    fi
-  elif test x$enable_splash_output = xyes; then
-    PKG_CHECK_MODULES(GDK, gdk-2.0)
-    AC_MSG_WARN("GDK is required by the glib wrapper when splash output device is
-                 enabled. If you want to comppile popler without GDK use --disable-splash-output too")
-    enable_gdk=yes
-  fi
-  if test x$enable_gdk = xyes; then
-    AC_DEFINE(POPPLER_WITH_GDK,[1], [Have GDK])
-    GDK_FEATURE="#define POPPLER_WITH_GDK 1"
-    POPPLER_GLIB_DISABLE_DEPRECATED="$POPPLER_GLIB_DISABLE_DEPRECATED -DGDK_DISABLE_DEPRECATED -DGDK_PIXBUF_DISABLE_DEPRECATED"
-    POPPLER_GLIB_DISABLE_SINGLE_INCLUDES="$POPPLER_GLIB_DISABLE_SINGLE_INCLUDES -DGTK_DISABLE_SINGLE_INCLUDES"
-  else
-    GDK_FEATURE=""
-  fi
-fi
-AM_CONDITIONAL(BUILD_WITH_GDK, test x$enable_gdk = xyes)
-AC_SUBST(GDK_CFLAGS)
-AC_SUBST(GDK_LIBS)
-AC_SUBST(GDK_FEATURE)
-
+AM_CONDITIONAL(HAVE_INTROSPECTION, test "x$found_introspection" = "xyes")
+AC_SUBST(GLIB_REQ)
 AC_SUBST(POPPLER_GLIB_DISABLE_DEPRECATED)
 AC_SUBST(POPPLER_GLIB_DISABLE_SINGLE_INCLUDES)
 
-AC_ARG_ENABLE(poppler-qt,
-	      AC_HELP_STRING([--disable-poppler-qt],
-			     [Don't compile poppler qt wrapper.]),
-	      enable_poppler_qt=$enableval,
-	      enable_poppler_qt="try")
-
-if test x$enable_poppler_qt = xyes; then
-  POPPLER_FIND_QT(POPPLER_QT,,)
-elif test x$enable_poppler_qt = xtry; then
-  POPPLER_FIND_QT(POPPLER_QT,
-		  [enable_poppler_qt="yes"],
-                  [enable_poppler_qt="no"])
-fi
-AC_SUBST(POPPLER_QT_CXXFLAGS)
-AC_SUBST(POPPLER_QT_LIBS)
-
-AM_CONDITIONAL(BUILD_POPPLER_QT, test "x$enable_poppler_qt" = "xyes")
+GTK_DOC_CHECK([1.14],[--flavour no-tmpl])
 
 dnl 
 dnl Try Qt4
@@ -423,13 +494,15 @@ AC_SUBST(POPPLER_QT4_LIBS)
 AC_SUBST(POPPLER_QT4_TEST_LIBS)
 
 if test x$enable_poppler_qt4 = xyes; then
+  AC_CHECK_TOOL(MOCQT4, moc)
   AC_MSG_CHECKING([for Qt4 moc])
-  MOCQT4=`which moc`
   mocversion=`$MOCQT4 -v 2>&1`
   mocversiongrep=`echo $mocversion | grep "Qt 4"`
   if test x"$mocversiongrep" != x"$mocversion"; then
+    AC_MSG_RESULT([no])
     # moc was not the qt4 one, try with moc-qt4
-    MOCQT4=`which moc-qt4`
+    AC_CHECK_TOOL(MOCQT4, moc-qt4)
+    AC_MSG_CHECKING([for Qt4 moc-qt4])
     mocversion=`$MOCQT4 -v 2>&1`
     mocversiongrep=`echo $mocversion | grep "Qt 4"`
     if test x"$mocversiongrep" != x"$mocversion"; then
@@ -444,34 +517,38 @@ fi
 
 AM_CONDITIONAL(BUILD_POPPLER_QT4, test "x$enable_poppler_qt4" = "xyes")
 
+dnl
+dnl CPP frontend
+dnl
+
+AC_ARG_ENABLE(poppler-cpp,
+              AC_HELP_STRING([--disable-poppler-cpp],
+                             [Don't compile poppler cpp wrapper.]),
+              enable_poppler_cpp=$enableval,
+              enable_poppler_cpp="yes")
+if test x$enable_poppler_cpp = xyes; then
+  AM_ICONV()
+  if test x$am_func_iconv != xyes; then
+    enable_poppler_cpp=no
+  fi
+fi
+
+AM_CONDITIONAL(BUILD_POPPLER_CPP, test "x$enable_poppler_cpp" = "xyes")
+
+
 AC_ARG_ENABLE(gtk-test,
               AC_HELP_STRING([--disable-gtk-test],
 	                     [Don't compile GTK+ test program.]),
               enable_gtk_test=$enableval,
               enable_gtk_test="try")
 if test x$enable_gtk_test = xyes; then
-  PKG_CHECK_MODULES(GTK_TEST, gtk+-2.0 >= 2.12 gdk-pixbuf-2.0 gthread-2.0)
+  PKG_CHECK_MODULES(GTK_TEST, gtk+-2.0 >= 2.14 gdk-pixbuf-2.0 gthread-2.0 gio-2.0)
 elif test x$enable_gtk_test = xtry; then
-  PKG_CHECK_MODULES(GTK_TEST, gtk+-2.0 >= 2.12 gdk-pixbuf-2.0 gthread-2.0,
+  PKG_CHECK_MODULES(GTK_TEST, gtk+-2.0 >= 2.14 gdk-pixbuf-2.0 gthread-2.0 gio-2.0,
                     [enable_gtk_test="yes"],
                     [enable_gtk_test="no"])
 fi
 AM_CONDITIONAL(BUILD_GTK_TEST, test x$enable_gtk_test = xyes -a x$enable_poppler_glib = xyes)
-
-AC_ARG_ENABLE(abiword-output,
-              AC_HELP_STRING([--disable-abiword-output],
-                             [Don't build the abiword backend.]),
-              enable_abiword_output=$enableval,
-              enable_abiword_output="try")
-if test x$enable_abiword_output = xyes; then
-  PKG_CHECK_MODULES(ABIWORD, libxml-2.0)
-elif test x$enable_abiword_output = xtry; then
-  PKG_CHECK_MODULES(ABIWORD, libxml-2.0,
-                    [enable_abiword_output="yes"],
-                    [enable_abiword_output="no"])
-fi
-
-AM_CONDITIONAL(BUILD_ABIWORD_OUTPUT, test x$enable_abiword_output = xyes)
 
 AC_ARG_ENABLE(utils,
               AC_HELP_STRING([--disable-utils],
@@ -510,10 +587,10 @@ if test "x$GCC" != xyes; then
 fi
 case "$enable_compile_warnings" in
   no)	;;
-  yes)	CXXFLAGS="-Wall -Wno-write-strings -Woverloaded-virtual $CXXFLAGS" ;;
-  kde)	CXXFLAGS="-Wnon-virtual-dtor -Wno-long-long -Wundef -ansi \
-		-D_XOPEN_SOURCE=500 -D_BSD_SOURCE -Wcast-align \
-		-Wconversion -Wchar-subscripts -Wall -W -Wpointer-arith \
+  yes)	CXXFLAGS="-Wall -Wno-write-strings -Woverloaded-virtual -Wnon-virtual-dtor -Wcast-align -fno-exceptions -fno-check-new -fno-common $CXXFLAGS" ;;
+  kde)	CXXFLAGS="-Wnon-virtual-dtor -Wno-long-long -Wundef \
+		-D_XOPEN_SOURCE=600 -D_BSD_SOURCE -Wcast-align \
+		-Wconversion -Wall -W -Wpointer-arith \
 		-Wwrite-strings -O2 -Wformat-security \
 		-Wmissing-format-attribute -fno-exceptions -fno-check-new \
 		-fno-common $CXXFLAGS" ;;
@@ -534,6 +611,7 @@ AC_SUBST(PC_REQUIRES_PRIVATE)
 AC_SUBST([POPPLER_MAJOR_VERSION],[poppler_version_major])
 AC_SUBST([POPPLER_MINOR_VERSION],[poppler_version_minor])
 AC_SUBST([POPPLER_MICRO_VERSION],[poppler_version_micro])
+AC_SUBST([POPPLER_VERSION],[poppler_version])
 
 AC_OUTPUT([
 Makefile
@@ -545,34 +623,45 @@ utils/Makefile
 glib/Makefile
 glib/poppler-features.h
 glib/reference/Makefile
+glib/reference/version.xml
 glib/demo/Makefile
 test/Makefile
-qt/Makefile
 qt4/Makefile
 qt4/src/Makefile
 qt4/tests/Makefile
 qt4/demos/Makefile
+cpp/Makefile
+cpp/poppler-version.h
+cpp/tests/Makefile
 poppler.pc
+poppler-uninstalled.pc
 poppler-cairo.pc
+poppler-cairo-uninstalled.pc
 poppler-splash.pc
+poppler-splash-uninstalled.pc
 poppler-glib.pc
-poppler-qt.pc
-poppler-qt4.pc])
+poppler-glib-uninstalled.pc
+poppler-qt4.pc
+poppler-qt4-uninstalled.pc
+poppler-cpp.pc
+poppler-cpp-uninstalled.pc])
 
 
 echo ""
 echo "Building poppler with support for:"
+echo "  font configuration: $with_font_configuration"
 echo "  splash output:      $enable_splash_output"
 echo "  cairo output:       $enable_cairo_output"
-echo "  abiword output:     $enable_abiword_output"
-echo "  qt wrapper:         $enable_poppler_qt"
 echo "  qt4 wrapper:        $enable_poppler_qt4"
 echo "  glib wrapper:       $enable_poppler_glib"
-echo "    use GDK:          $enable_gdk"
+echo "    introspection:    $found_introspection"
+echo "  cpp wrapper:        $enable_poppler_cpp"
 echo "  use gtk-doc:        $enable_gtk_doc"
 echo "  use libjpeg:        $enable_libjpeg"
 echo "  use libpng:         $enable_libpng"
+echo "  use libtiff:        $enable_libtiff"
 echo "  use zlib:           $enable_zlib"
+echo "  use libcurl:        $enable_libcurl"
 echo "  use libopenjpeg:    $enable_libopenjpeg"
 echo "  use cms:            $enable_cms"
 echo "  command line utils: $enable_utils"
@@ -580,6 +669,10 @@ echo ""
 
 if test x$enable_splash_output = xno -a x$enable_cairo_output = xno; then
 	echo "  Warning: There is no rendering backend enabled"
+fi
+
+if test x$enable_single_precision = xyes -a x$enable_fixedpoint = xyes; then
+	echo "  Warning: Single precision and fixed point options should not be enabled at the same time"
 fi
 
 if test x$enable_libjpeg != xyes; then

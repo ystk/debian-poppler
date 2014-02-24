@@ -17,9 +17,10 @@
 // Copyright (C) 2005-2008 Jeff Muizelaar <jeff@infidigm.net>
 // Copyright (C) 2005, 2006 Kristian Høgsberg <krh@redhat.com>
 // Copyright (C) 2005 Nickolay V. Shmyrev <nshmyrev@yandex.ru>
-// Copyright (C) 2006-2009 Carlos Garcia Campos <carlosgc@gnome.org>
-// Copyright (C) 2008, 2009 Adrian Johnson <ajohnson@redneon.com>
+// Copyright (C) 2006-2011 Carlos Garcia Campos <carlosgc@gnome.org>
+// Copyright (C) 2008, 2009, 2011, 2012 Adrian Johnson <ajohnson@redneon.com>
 // Copyright (C) 2008 Michael Vrable <mvrable@cs.ucsd.edu>
+// Copyright (C) 2010, 2011 Thomas Freitag <Thomas.Freitag@alfa.de>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -106,7 +107,11 @@ public:
   // Does this device use functionShadedFill(), axialShadedFill(), and
   // radialShadedFill()?  If this returns false, these shaded fills
   // will be reduced to a series of other drawing operations.
-  virtual GBool useShadedFills() { return gTrue; }
+#if CAIRO_VERSION == CAIRO_VERSION_ENCODE(1, 11, 2)
+  virtual GBool useShadedFills(int type) { return type <= 7; }
+#else
+  virtual GBool useShadedFills(int type) { return type < 4; }
+#endif
 
   // Does this device use FillColorStop()?
   virtual GBool useFillColorStop() { return gTrue; }
@@ -122,9 +127,6 @@ public:
 
   // End a page.
   virtual void endPage();
-
-  //----- link borders
-  virtual void drawLink(Link *link, Catalog *catalog);
 
   //----- save/restore graphics state
   virtual void saveState(GfxState *state);
@@ -150,14 +152,14 @@ public:
 
   //----- update text state
   virtual void updateFont(GfxState *state);
-  virtual void updateRender(GfxState *state);
 
   //----- path painting
   virtual void stroke(GfxState *state);
   virtual void fill(GfxState *state);
   virtual void eoFill(GfxState *state);
-  virtual GBool tilingPatternFill(GfxState *state, Object *str,
-				  int paintType, Dict *resDict,
+  virtual void clipToStrokePath(GfxState *state);
+  virtual GBool tilingPatternFill(GfxState *state, Catalog *cat, Object *str,
+				  double *pmat, int paintType, int tilingType, Dict *resDict,
 				  double *mat, double *bbox,
 				  int x0, int y0, int x1, int y1,
 				  double xStep, double yStep);
@@ -165,6 +167,10 @@ public:
   virtual GBool axialShadedSupportExtend(GfxState *state, GfxAxialShading *shading);
   virtual GBool radialShadedFill(GfxState *state, GfxRadialShading *shading, double sMin, double sMax);
   virtual GBool radialShadedSupportExtend(GfxState *state, GfxRadialShading *shading);
+#if CAIRO_VERSION == CAIRO_VERSION_ENCODE(1, 11, 2)
+  virtual GBool gouraudTriangleShadedFill(GfxState *state, GfxGouraudTriangleShading *shading);
+  virtual GBool patchMeshShadedFill(GfxState *state, GfxPatchMeshShading *shading);
+#endif
 
   //----- path clipping
   virtual void clip(GfxState *state);
@@ -268,13 +274,37 @@ public:
 
 protected:
   void doPath(cairo_t *cairo, GfxState *state, GfxPath *path);
-  
+  cairo_surface_t *downscaleSurface(cairo_surface_t *orig_surface);
+  void getScaledSize(int orig_width, int orig_height,
+		     int *scaledWidth, int *scaledHeight);
+  cairo_filter_t getFilterForSurface(cairo_surface_t *image,
+				     GBool interpolate);
+  GBool getStreamData (Stream *str, char **buffer, int *length);
+  void setMimeData(Stream *str, Object *ref, cairo_surface_t *image);
+  void fillToStrokePathClip();
+  void alignStrokeCoords(double *x, double *y);
+
   GfxRGB fill_color, stroke_color;
   cairo_pattern_t *fill_pattern, *stroke_pattern;
   double fill_opacity;
   double stroke_opacity;
+  GBool stroke_adjust;
+  GBool adjusted_stroke_width;
+  GBool align_stroke_coords;
   CairoFont *currentFont;
-  
+
+  struct StrokePathClip {
+    cairo_path_t *path;
+    cairo_matrix_t ctm;
+    double line_width;
+    double *dashes;
+    int dash_count;
+    double dash_offset;
+    cairo_line_cap_t cap;
+    cairo_line_join_t join;
+    double miter;
+  } *strokePathClip;
+
   XRef *xref;			// xref table for current document
   Catalog *catalog;
 
@@ -288,9 +318,15 @@ protected:
   cairo_matrix_t orig_matrix;
   GBool needFontUpdate;                // set when the font needs to be updated
   GBool printing;
+  GBool use_show_text_glyphs;
   cairo_surface_t *surface;
   cairo_glyph_t *glyphs;
   int glyphCount;
+  cairo_text_cluster_t *clusters;
+  int clusterCount;
+  char *utf8;
+  int utf8Count;
+  int utf8Max;
   cairo_path_t *textClipPath;
   GBool inType3Char;		// inside a Type 3 CharProc
   double t3_glyph_wx, t3_glyph_wy;
@@ -305,23 +341,25 @@ protected:
   cairo_pattern_t *group;
   cairo_pattern_t *shape;
   cairo_pattern_t *mask;
+  cairo_matrix_t mask_matrix;
   cairo_surface_t *cairo_shape_surface;
   cairo_t *cairo_shape;
   int knockoutCount;
   struct ColorSpaceStack {
     GBool knockout;
     GfxColorSpace *cs;
+    cairo_matrix_t group_matrix;
     struct ColorSpaceStack *next;
   } * groupColorSpaceStack;
 
   struct MaskStack {
-      cairo_pattern_t *mask;
-      struct MaskStack *next;
+    cairo_pattern_t *mask;
+    cairo_matrix_t mask_matrix;
+    struct MaskStack *next;
   } *maskStack;
 
   GBool haveCSPattern;	// set if text has been drawn with a
                         //   clipping render mode because of pattern colorspace
-  int savedRender;	// use if pattern colorspace
 };
 
 //------------------------------------------------------------------------
@@ -355,7 +393,11 @@ public:
   // Does this device use functionShadedFill(), axialShadedFill(), and
   // radialShadedFill()?  If this returns false, these shaded fills
   // will be reduced to a series of other drawing operations.
-  virtual GBool useShadedFills() { return gTrue; }
+#if CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1, 11, 2)
+  virtual GBool useShadedFills(int type) { return type <= 7; }
+#else
+  virtual GBool useShadedFills(int type) { return type < 4; }
+#endif
 
   // Does this device use FillColorStop()?
   virtual GBool useFillColorStop() { return gFalse; }
@@ -366,9 +408,6 @@ public:
 
   // Does this device need non-text content?
   virtual GBool needNonText() { return gTrue; }
-
-    //----- link borders
-  virtual void drawLink(Link *link, Catalog *catalog) { }
 
   //----- save/restore graphics state
   virtual void saveState(GfxState *state) { }
@@ -398,8 +437,9 @@ public:
   virtual void stroke(GfxState *state) { }
   virtual void fill(GfxState *state) { }
   virtual void eoFill(GfxState *state) { }
-  virtual GBool tilingPatternFill(GfxState *state, Object *str,
-				  int paintType, Dict *resDict,
+  virtual void clipToStrokePath(GfxState *state) { }
+  virtual GBool tilingPatternFill(GfxState *state, Catalog *cat, Object *str,
+				  double *pmat, int paintType, int tilingType, Dict *resDict,
 				  double *mat, double *bbox,
 				  int x0, int y0, int x1, int y1,
 				  double xStep, double yStep) { return gTrue; }
