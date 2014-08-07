@@ -11,3 +11,4 @@ CVE-2013-1788-part1.patch
 CVE-2013-1788-part2.patch
 CVE-2013-1788-part3.patch
 CVE-2013-1790.patch
+do-not-return-exec-to-libjpeg.patch

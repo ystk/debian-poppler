@@ -1,0 +1,14 @@
+Index: poppler-0.12.4/poppler/DCTStream.cc
+===================================================================
+--- poppler-0.12.4.orig/poppler/DCTStream.cc	2013-09-30 11:59:43.505744236 +0200
++++ poppler-0.12.4/poppler/DCTStream.cc	2013-09-30 12:00:21.605553252 +0200
+@@ -70,7 +70,8 @@ DCTStream::~DCTStream() {
+ static void exitErrorHandler(jpeg_common_struct *error) {
+   j_decompress_ptr cinfo = (j_decompress_ptr)error;
+   str_src_mgr * src = (struct str_src_mgr *)cinfo->src;
+-  src->abort = true;
++  // we must not return to libjpeg
++  abort();
+ }
+ 
+ void DCTStream::init()

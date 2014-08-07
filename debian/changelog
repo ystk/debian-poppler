@@ -1,3 +1,10 @@
+poppler (0.12.4-1.2+squeeze4) squeeze-lts; urgency=low
+
+  * Abort after processing libjpeg errors rather than returning the
+    execution to it. (Closes: #722705)
+
+ -- Raphael Geissert <geissert@debian.org>  Wed, 30 Jul 2014 16:51:36 +0200
+
 poppler (0.12.4-1.2+squeeze3) oldstable-security; urgency=high
 
   * Upload to oldstable-security.
