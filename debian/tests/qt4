@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+SRCDIR=$(dirname $(realpath $0))
+cd $ADTTMP
+g++ -Wall -Werror -pedantic -Wno-long-long -o poppler-qt4-test $SRCDIR/test-qt4.cpp `pkg-config --cflags --libs poppler-qt4 QtCore`
+./poppler-qt4-test "/usr/share/cups/data/default-testpage.pdf"

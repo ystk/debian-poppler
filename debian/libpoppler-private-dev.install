@@ -2,10 +2,3 @@ usr/include/poppler/*.h
 usr/include/poppler/fofi/
 usr/include/poppler/goo/
 usr/include/poppler/splash/
-# private headers not installed
-poppler/ArthurOutputDev.h usr/include/poppler/
-poppler/CairoFontEngine.h usr/include/poppler/
-poppler/CairoOutputDev.h usr/include/poppler/
-poppler/DCTStream.h usr/include/poppler/
-poppler/JPEG2000Stream.h usr/include/poppler/
-poppler/PageLabelInfo.h usr/include/poppler/

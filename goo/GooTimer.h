@@ -8,6 +8,8 @@
 // Copyright 2007 Krzysztof Kowalczyk <kkowalczyk@gmail.com>
 // Copyright 2010 Hib Eris <hib@hiberis.nl>
 // Copyright 2011 Albert Astals cid <aacid@kde.org>
+// Copyright 2014 Bogdan Cristea <cristeab@gmail.com>
+// Copyright 2014 Peter Breitenlohner <peb@mppmu.mpg.de>
 // Inspired by gtimer.c in glib, which is Copyright 2000 by the GLib Team
 //
 //========================================================================
@@ -19,13 +21,16 @@
 #pragma interface
 #endif
 
-#include "poppler/poppler-config.h"
+#include "poppler-config.h"
 #include "gtypes.h"
 #ifdef HAVE_GETTIMEOFDAY
 #include <sys/time.h>
 #endif
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #endif
 

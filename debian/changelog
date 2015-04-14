@@ -1,3 +1,355 @@
+poppler (0.26.5-2) unstable; urgency=medium
+
+  * Backport upstream commit 01723aa17e836e818158dbdc56df642a290be300 to map
+    Standard/Expert encoding ligatures to AGLFN names; patch
+    upstream_Map-Standard-Expert-encoding-ligatures-to-AGLFN-name.patch.
+    (Closes: #740801)
+  * Bump Standards-Version to 3.9.6, no changes required.
+
+ -- Pino Toscano <pino@debian.org>  Sun, 19 Oct 2014 18:23:32 +0200
+
+poppler (0.26.5-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Pino Toscano <pino@debian.org>  Sat, 27 Sep 2014 15:57:03 +0200
+
+poppler (0.26.4-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Fix linking order in autopkgtest tests.
+  * Update copyright.
+
+ -- Pino Toscano <pino@debian.org>  Fri, 22 Aug 2014 23:43:20 +0200
+
+poppler (0.26.3-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Bump the libqt4-dev (build-)dependency to 4.7.0, as noted in the upstream
+    build system.
+  * Update copyright.
+
+ -- Pino Toscano <pino@debian.org>  Sun, 20 Jul 2014 19:16:14 +0200
+
+poppler (0.26.2-3) unstable; urgency=medium
+
+  * Mark libpoppler-dev, libpoppler-private-dev, libpoppler-qt5-dev, and
+    libpoppler-cpp-dev as Multi-Arch: same; dependencies of the other -dev's
+    are not ready. (Closes: #743817)
+  * Switch from autotools-dev to dh-autoreconf: (Closes: #753342)
+    - autoreconf in as-needed mode, and thus drop patch ltmain-as-needed.diff
+    - remove Makefile.in parts from qt-visibility.diff
+  * Provide a simple debian/upstream/metadata file, for DEP 12.
+  * Remove Dave Beckett and Ross Burton from Uploaders, since they have done
+    no work at all in poppler.
+  * Add simple autopkgtest tests for the frontends (cpp, glib, qt4, qt5);
+    loosely inspired by the glib one provided by Ubuntu.
+
+  [ Peter Pentchev ]
+  * Drop the unused libgtk2.0-dev build dependency. (Closes: #749972)
+
+ -- Pino Toscano <pino@debian.org>  Fri, 18 Jul 2014 19:04:31 +0200
+
+poppler (0.26.2-2) unstable; urgency=medium
+
+  * Upload to unstable. (See #751525)
+
+ -- Pino Toscano <pino@debian.org>  Wed, 02 Jul 2014 21:37:11 +0200
+
+poppler (0.26.2-1) experimental; urgency=medium
+
+  * New upstream release:
+    - 'pdftohtml -v' now returns 0 as exit code (Closes: #732427)
+
+ -- Pino Toscano <pino@debian.org>  Fri, 20 Jun 2014 00:53:56 +0200
+
+poppler (0.26.1-1) experimental; urgency=medium
+
+  * New upstream release:
+    - fix extraction of text in some files (Closes: #747057)
+  * Update copyright.
+  * Merge changes from 0.24.5-4:
+    - upstream_Fix-extraction-of-text-in-some-files.patch: drop, backported
+
+ -- Pino Toscano <pino@debian.org>  Sat, 24 May 2014 16:03:20 +0200
+
+poppler (0.26.0-1) experimental; urgency=medium
+
+  * New upstream release:
+    - pdfseparate supports left-padding PDF page patterns (Closes: #723121)
+    - poppler-glib uses the GLib logging features for Poppler's messages
+      (Closes: #736425)
+  * Rename packages according to the new SONAMEs:
+    - libpoppler44 -> libpoppler46
+  * Update copyright.
+  * Update symbols files.
+  * debian/patches:
+    - upstream_fix_qt5_moc_detection.diff: drop, backported
+    - qt-visibility.diff: remove applied parts
+
+ -- Pino Toscano <pino@debian.org>  Fri, 25 Apr 2014 23:54:13 +0200
+
+poppler (0.24.5-4) unstable; urgency=medium
+
+  * Backport upstream commit 5b2cdef49a8a0a92fd323fbe45841a5098a42ece to fix
+    extraction of text in in some documents; patch
+    upstream_Fix-extraction-of-text-in-some-files.patch. (Closes: #747057)
+  * Enable the autotools_dev dh addon to update config.{guess,sub} before
+    configure. (Closes: #734014)
+
+ -- Pino Toscano <pino@debian.org>  Sat, 24 May 2014 15:00:15 +0200
+
+poppler (0.24.5-3) unstable; urgency=medium
+
+  * Upload to unstable.
+  * The rebuild closes: #742293.
+
+ -- Pino Toscano <pino@debian.org>  Sat, 05 Apr 2014 16:28:26 +0200
+
+poppler (0.24.5-2) experimental; urgency=medium
+
+  * Backport upstream commits a766c55f68db38feed91cf003a0d5710e2f925a8 and
+    e238c1f83fd5f667336bfbb0e9a59569ff638ecc to fix the detection of
+    Qt 5's moc; patch upstream_fix_qt5_moc_detection.diff.
+  * Rename patch qt4-visibility.diff to qt-visibility.diff, and extend to qt5.
+  * Provide poppler-qt5: (Closes: #716685)
+    - add the qtbase5-dev build dependency
+    - add the libpoppler-qt5-1 and libpoppler-qt5-dev binaries
+    - pass --enable-poppler-qt5 to configure
+    - add symbols file for libpoppler-qt5-1
+
+ -- Pino Toscano <pino@debian.org>  Sun, 02 Feb 2014 14:18:21 +0100
+
+poppler (0.24.5-1) experimental; urgency=low
+
+  * New upstream release:
+    - poppler can handle documents bigger than 2GB. (Closes: #642530)
+    - fixes a typo in an error message. (Closes: #708972)
+  * Rename packages according to the new SONAMEs:
+    - libpoppler37 -> libpoppler44
+  * debian/patches:
+    - qt4-visibility.diff: refresh
+    - upstream_pdfseparate-improve-the-path-building.patch: drop, backported
+    - upstream_Allow-only-one-d-in-the-filename.diff: drop, backported
+  * Update copyright.
+  * Update symbols files.
+  * Remove the manual link to pthreads, introduced in 0.18.4-10, as it is no
+    more needed now (poppler does it on its own now).
+
+ -- Pino Toscano <pino@debian.org>  Tue, 21 Jan 2014 23:58:32 +0100
+
+poppler (0.22.5-4) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Pino Toscano <pino@debian.org>  Tue, 21 Jan 2014 22:43:36 +0100
+
+poppler (0.22.5-3) experimental; urgency=low
+
+  * Merge changes from 0.18.4-9 and 0.18.4-10:
+    - upstream_Allow-only-one-d-in-the-filename.diff: pick it unmodified from
+      upstream
+
+ -- Pino Toscano <pino@debian.org>  Wed, 18 Dec 2013 14:40:56 +0100
+
+poppler (0.22.5-2) experimental; urgency=low
+
+  * Merge changes from 0.18.4-7 and 0.18.4-8:
+    - CVE-2012-2142.diff: drop, fixed upstream
+    - upstream_pdfseparate.1-Syntax-fixes.patch: drop, backported
+
+ -- Pino Toscano <pino@debian.org>  Wed, 21 Aug 2013 14:25:35 +0200
+
+poppler (0.22.5-1) experimental; urgency=low
+
+  * New upstream release:
+    - fixes case sensitive search in poppler-glib. (Closes: #299657)
+    - poppler passes correct UTF-8 strings to cairo. (Closes: #697766)
+  * Rename packages according to the new SONAMEs:
+    - libpoppler28 -> libpoppler37
+  * debian/patches:
+    - qt4-visibility.diff: refresh
+    - upstream_fix-GooString-insert.diff: drop, applied upstream
+    - upstream_Fix-another-invalid-memory-access-in-1091.pdf.asan.7.patch: drop,
+      backported
+    - upstream_Fix-invalid-memory-access-in-2030.pdf.asan.69.463.patch: drop,
+      backported
+    - upstream_Fix-invalid-memory-access-in-1150.pdf.asan.8.69.patch: drop,
+      backported
+    - upstream_Initialize-refLine-totally.patch: drop, backported
+    - upstream_cairo-support-parameterized-Gouraud-shading.patch: drop,
+      applied upstream
+  * Update copyright.
+  * Update symbols files.
+  * Update configure arguments:
+    - Add: --enable-libpng, --enable-libtiff, --enable-cms=lcms2
+      (no actual changes, just enforce their usage)
+  * Update recommends and suggests:
+    - libpoppler-private-dev: drop the libpng-dev, libtiff-dev suggests.
+    - poppler-utils: drop the ghostscript recommend.
+  * Split the API documentation from libpoppler-glib-dev to an own
+    libpoppler-glib-doc.
+
+ -- Pino Toscano <pino@debian.org>  Wed, 07 Aug 2013 13:21:35 +0200
+
+poppler (0.20.5-3) experimental; urgency=low
+
+  * Merge changes from 0.18.4-6:
+    - upstream_Fix-another-invalid-memory-access-in-1091.pdf.asan.7.patch:
+      update from upstream repository
+    - upstream_Fix-invalid-memory-access-in-2030.pdf.asan.69.463.patch:
+      update from upstream repository
+    - upstream_Fix-invalid-memory-access-in-1150.pdf.asan.8.69.patch:
+      update from upstream repository
+    - upstream_Initialize-refLine-totally.patch:
+      update from upstream repository
+
+ -- Pino Toscano <pino@debian.org>  Tue, 26 Mar 2013 00:52:48 +0100
+
+poppler (0.20.5-2) experimental; urgency=low
+
+  * Merge changes from 0.18.4-4 and 0.18.4-5:
+    - psoutputdev-initialize-vars.diff: drop, obsolete
+  * Backport upstream commit ae8fc0cbfc6123189e17b3cf1286e0540f181646 to
+    support parameterized Gouraud shading in CairoOutputDev; patch
+    upstream_cairo-support-parameterized-Gouraud-shading.patch.
+    (Closes: #699467)
+
+ -- Pino Toscano <pino@debian.org>  Thu, 31 Jan 2013 19:41:24 +0100
+
+poppler (0.20.5-1) experimental; urgency=low
+
+  * New upstream release.
+  * Update copyright.
+
+ -- Pino Toscano <pino@debian.org>  Wed, 10 Oct 2012 21:02:25 +0200
+
+poppler (0.20.4-1) experimental; urgency=low
+
+  * New upstream release.
+  * Rename packages according to the new SONAMEs:
+    - libpoppler27 -> libpoppler28
+  * Add few optional symbols to the libpoppler-qt4-4 symbols file.
+  * Rename docs to libpoppler28.docs to make sure it is used only for
+    libpoppler.
+
+ -- Pino Toscano <pino@debian.org>  Sun, 23 Sep 2012 17:03:39 +0200
+
+poppler (0.20.3-2) experimental; urgency=low
+
+  * Adapt the libpoppler-qt4-4 symbols file to the internal symbols exported
+    only with GCC 4.7, and to other templinst arm* symbols.
+
+ -- Pino Toscano <pino@debian.org>  Tue, 14 Aug 2012 01:08:12 +0200
+
+poppler (0.20.3-1) experimental; urgency=low
+
+  * New upstream release.
+  * Rename packages according to the new SONAMEs:
+    - libpoppler26 -> libpoppler27
+  * Update copyright.
+  * Remove from libpoppler-private-dev the headers we used to install manually
+    but which are not installed by the upstream sources:
+    - ArthurOutputDev.h
+    - CairoFontEngine.h
+    - CairoOutputDev.h
+    - DCTStream.h
+    - JPEG2000Stream.h
+    - PageLabelInfo.h
+    using them would have meant not compiling with upstream sources anyway.
+  * Remove the libopenjpeg-dev suggest from libpoppler-private-dev, since now
+    there are no more headers including openjpeg headers.
+  * Add a symbols file for libpoppler-qt4-4, based on poppler 0.20.1:
+    - add patch qt4-visibility.diff to enable the GCC hidden visibility,
+      and avoid exporting private symbols
+    - set the current poppler version as version for the remaining private
+      symbols
+    - stop invoking dh_makeshlibs manually for libpoppler-qt4-4
+
+ -- Pino Toscano <pino@debian.org>  Sat, 11 Aug 2012 12:13:20 +0200
+
+poppler (0.20.2-2) experimental; urgency=low
+
+  * Raise the version of the libpoppler-private-dev breaks/replaces against
+    libpoppler-dev to << 0.20.2. (Closes: #681313)
+
+ -- Pino Toscano <pino@debian.org>  Thu, 12 Jul 2012 12:19:17 +0200
+
+poppler (0.20.2-1) experimental; urgency=low
+
+  * New upstream release.
+  * Merge changes from 0.18.4-3:
+    - upstream_cairo-use-correct-userfont-font-bbox.patch: drop, backported
+    - upstream_Change-nnnnnn-to-number.patch: drop, backported
+    - upstream_pdfinfo-decode-utf-16-surrogate-pairs.patch: drop, backported
+  * Update copyright.
+
+ -- Pino Toscano <pino@debian.org>  Wed, 11 Jul 2012 23:51:35 +0200
+
+poppler (0.20.1-1) experimental; urgency=low
+
+  * New upstream release.
+  * Rename packages according to the new SONAMEs:
+    - libpoppler19 -> libpoppler26
+    - libpoppler-qt4-3 -> libpoppler-qt4-4
+  * Bump shlibs for libpoppler-qt4-4.
+  * Update copyright.
+  * Update build dependencies:
+    - Switch liblcms1-dev to liblcms2-dev, supported upstream now.
+  * debian/patches:
+    - ltmain-as-needed.diff: refresh
+  * Add pdfdetach in the description of poppler-utils.
+  * Add a symbols file for libpoppler-glib8, based on poppler 0.18;
+    the C++ symbols (internal) of it now have the current poppler version
+    as version.
+
+ -- Pino Toscano <pino@debian.org>  Mon, 11 Jun 2012 15:14:29 +0200
+
+poppler (0.18.4-10) unstable; urgency=low
+
+  * Manually force the link of everything against pthreads; while I cannot
+    reproduce #730112, it seems (see e.g. #728113) that doing so would fix
+    the poppler utilities. (Closes: #730112)
+    Newer versions of poppler link to pthreads already, so this is a
+    workaround for 0.18.x only.
+
+ -- Pino Toscano <pino@debian.org>  Sun, 15 Dec 2013 12:49:01 +0100
+
+poppler (0.18.4-9) unstable; urgency=medium
+
+  * Remove the custom RPATH handing on Hurd, since the issue does not affect
+    the build anymore; remove the hurd-only chrpath build dependency.
+  * Backport upstream commits b8682d868ddf7f741e93b791588af0932893f95c (patch
+    upstream_pdfseparate-improve-the-path-building.patch)
+    and 61f79b8447c3ac8ab5a26e79e0c28053ffdccf75 (patch
+    upstream_Allow-only-one-d-in-the-filename.diff) to fix two string/format
+    issues in pdfseparate, reported as CVE-2013-4473 and CVE-2013-4474.
+    (Closes: #723124,  #729064)
+  * Bump Standards-Version to 3.9.5, no changes required.
+
+ -- Pino Toscano <pino@debian.org>  Sun, 17 Nov 2013 18:57:18 +0100
+
+poppler (0.18.4-8) unstable; urgency=low
+
+  * Remove the .la files from debian/tmp, to shorten the --list-missing output.
+  * Workaround issues of old libtool on Hurd, by removing with chrpath the
+    extra RPATH added; add the hurd-only chrpath build dependency for that.
+  * Backport upstream commit 8e504bf2543621973fdaddbd29055ce435540146 to fix
+    small syntax issues in pdfseparate.1.
+
+ -- Pino Toscano <pino@debian.org>  Tue, 20 Aug 2013 19:12:31 +0200
+
+poppler (0.18.4-7) unstable; urgency=low
+
+  * Filter stuff that might end up in the shell; patch CVE-2012-2142.diff
+    by Marek Kasik <mkasik@redhat.com> to fix CVE-2012-2142.
+  * Fix Vcs-* headers.
+  * Bump Standards-Version to 3.9.4, no changes required.
+  * Adjust watch file to allow both gz and xz extensions.
+  * Mark poppler-dbg as Multi-Arch: same.
+
+ -- Pino Toscano <pino@debian.org>  Fri, 09 Aug 2013 12:50:40 +0200
+
 poppler (0.18.4-6) unstable; urgency=low
 
   * Backport upstream commits 0388837f01bc467045164f9ddaff787000a8caaa (patch

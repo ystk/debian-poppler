@@ -1,4 +1,3 @@
-usr/share/gtk-doc/html/poppler/ usr/share/doc/libpoppler-glib-dev/html/
 usr/include/poppler/glib/
 usr/lib/*/libpoppler-glib.a
 usr/lib/*/libpoppler-glib.so

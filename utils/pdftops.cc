@@ -19,8 +19,11 @@
 // Copyright (C) 2007-2008, 2010 Albert Astals Cid <aacid@kde.org>
 // Copyright (C) 2009 Till Kamppeter <till.kamppeter@gmail.com>
 // Copyright (C) 2009 Sanjoy Mahajan <sanjoy@mit.edu>
-// Copyright (C) 2009, 2011 William Bader <williambader@hotmail.com>
+// Copyright (C) 2009, 2011, 2012 William Bader <williambader@hotmail.com>
 // Copyright (C) 2010 Hib Eris <hib@hiberis.nl>
+// Copyright (C) 2012 Thomas Freitag <Thomas.Freitag@alfa.de>
+// Copyright (C) 2013 Suzuki Toshiya <mpsuzuki@hiroshima-u.ac.jp>
+// Copyright (C) 2014 Adrian Johnson <ajohnson@redneon.com>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -79,7 +82,7 @@ static GBool level2 = gFalse;
 static GBool level2Sep = gFalse;
 static GBool level3 = gFalse;
 static GBool level3Sep = gFalse;
-static GBool doOrigPageSizes = gFalse;
+static GBool origPageSizes = gFalse;
 static GBool doEPS = gFalse;
 static GBool doForm = gFalse;
 #if OPI_SUPPORT
@@ -91,7 +94,7 @@ static GBool noEmbedT1Fonts = gFalse;
 static GBool noEmbedTTFonts = gFalse;
 static GBool noEmbedCIDPSFonts = gFalse;
 static GBool noEmbedCIDTTFonts = gFalse;
-static GBool noSubstFonts = gFalse;
+static GBool fontPassthrough = gFalse;
 static GBool preload = gFalse;
 static char paperSize[15] = "";
 static int paperWidth = -1;
@@ -106,6 +109,9 @@ static char userPassword[33] = "\001";
 static GBool quiet = gFalse;
 static GBool printVersion = gFalse;
 static GBool printHelp = gFalse;
+#if SPLASH_CMYK
+static GBool overprint = gFalse;
+#endif
 
 static const ArgDesc argDesc[] = {
   {"-f",          argInt,      &firstPage,      0,
@@ -124,7 +130,7 @@ static const ArgDesc argDesc[] = {
    "generate Level 3 PostScript"},
   {"-level3sep",  argFlag,     &level3Sep,      0,
    "generate Level 3 separable PostScript"},
-  {"-origpagesizes",argFlag,   &doOrigPageSizes,0,
+  {"-origpagesizes",argFlag,   &origPageSizes,0,
    "conserve original page sizes"},
   {"-eps",        argFlag,     &doEPS,          0,
    "generate Encapsulated PostScript (EPS)"},
@@ -146,7 +152,7 @@ static const ArgDesc argDesc[] = {
    "don't embed CID PostScript fonts"},
   {"-noembcidtt", argFlag, &noEmbedCIDTTFonts,  0,
    "don't embed CID TrueType fonts"},
-  {"-passfonts",  argFlag,        &noSubstFonts,0,
+  {"-passfonts",  argFlag,        &fontPassthrough,0,
    "don't substitute missing fonts"},
   {"-preload",    argFlag,     &preload,        0,
    "preload images and forms"},
@@ -170,6 +176,10 @@ static const ArgDesc argDesc[] = {
    "owner password (for encrypted files)"},
   {"-upw",        argString,   userPassword,    sizeof(userPassword),
    "user password (for encrypted files)"},
+#if SPLASH_CMYK
+  {"-overprint",argFlag,   &overprint,      0,
+   "enable overprint"},
+#endif
   {"-q",          argFlag,     &quiet,          0,
    "don't print any messages or errors"},
   {"-v",          argFlag,     &printVersion,   0,
@@ -222,10 +232,9 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Error: use only one of the 'level' options.\n");
     exit(1);
   }
-  if ((doOrigPageSizes ? 1 : 0) +
-      (doEPS ? 1 : 0) +
+  if ((doEPS ? 1 : 0) +
       (doForm ? 1 : 0) > 1) {
-    fprintf(stderr, "Error: use only one of -origpagesizes, -eps, and -form\n");
+    fprintf(stderr, "Error: use only one of -eps, and -form\n");
     exit(1);
   }
   if (level1) {
@@ -245,21 +254,32 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Error: forms are only available with Level 2 output.\n");
     exit(1);
   }
-  mode = doOrigPageSizes ? psModePSOrigPageSizes
-                         : doEPS ? psModeEPS
-                                 : doForm ? psModeForm
-                                          : psModePS;
+  mode = doEPS ? psModeEPS
+    : doForm ? psModeForm
+    : psModePS;
   fileName = new GooString(argv[1]);
 
   // read config file
   globalParams = new GlobalParams();
+  if (origPageSizes) {
+    paperWidth = paperHeight = -1;
+  }
   if (paperSize[0]) {
+    if (origPageSizes) {
+      fprintf(stderr, "Error: -origpagesizes and -paper may not be used together.\n");
+      exit(1);
+    }
     if (!setPSPaperSize(paperSize, paperWidth, paperHeight)) {
       fprintf(stderr, "Invalid paper size\n");
       delete fileName;
       goto err0;
     }
   }
+#if SPLASH_CMYK
+  if (overprint) {
+    globalParams->setOverprintPreview(gTrue);
+  }
+#endif  
   if (expand) {
     globalParams->setPSExpandSmaller(gTrue);
   }
@@ -273,7 +293,7 @@ int main(int argc, char *argv[]) {
     globalParams->setPSLevel(level);
   }
   if (splashResolution > 0) {
-    globalParams->setSplashResolution(splashResolution);
+    globalParams->setPSRasterResolution(splashResolution);
   }
   if (noEmbedT1Fonts) {
     globalParams->setPSEmbedType1(!noEmbedT1Fonts);
@@ -287,8 +307,8 @@ int main(int argc, char *argv[]) {
   if (noEmbedCIDTTFonts) {
     globalParams->setPSEmbedCIDTrueType(!noEmbedCIDTTFonts);
   }
-  if (noSubstFonts) {
-    globalParams->setPSSubstFonts(!noSubstFonts);
+  if (fontPassthrough) {
+    globalParams->setPSFontPassthrough(fontPassthrough);
   }
   if (preload) {
     globalParams->setPSPreload(preload);
@@ -337,7 +357,7 @@ int main(int argc, char *argv[]) {
 #ifdef ENFORCE_PERMISSIONS
   // check for print permission
   if (!doc->okToPrint()) {
-    error(-1, "Printing this document is not allowed.");
+    error(errNotAllowed, -1, "Printing this document is not allowed.");
     exitCode = 3;
     goto err1;
   }
@@ -347,7 +367,7 @@ int main(int argc, char *argv[]) {
   if (argc == 3) {
     psFileName = new GooString(argv[2]);
   } else if (fileName->cmp("fd://0") == 0) {
-    error(-1, "You have to provide an output filename when reading form stdin.");
+    error(errCommandLine, -1, "You have to provide an output filename when reading form stdin.");
     goto err1;
   } else {
     p = fileName->getCString() + fileName->getLength() - 4;
@@ -367,18 +387,25 @@ int main(int argc, char *argv[]) {
   if (lastPage < 1 || lastPage > doc->getNumPages()) {
     lastPage = doc->getNumPages();
   }
+  if (lastPage < firstPage) {
+    error(errCommandLine, -1,
+          "Wrong page range given: the first page ({0:d}) can not be after the last page ({1:d}).",
+          firstPage, lastPage);
+    goto err2;
+  }
 
   // check for multi-page EPS or form
   if ((doEPS || doForm) && firstPage != lastPage) {
-    error(-1, "EPS and form files can only contain one page.");
+    error(errCommandLine, -1, "EPS and form files can only contain one page.");
     goto err2;
   }
 
   // write PostScript file
-  psOut = new PSOutputDev(psFileName->getCString(), doc, doc->getXRef(),
-			  doc->getCatalog(), NULL, firstPage, lastPage, mode,
+  psOut = new PSOutputDev(psFileName->getCString(), doc,
+			  NULL, firstPage, lastPage, mode,
 			  paperWidth,
 			  paperHeight,
+                          noCrop,
 			  duplex);
   if (psOut->isOk()) {
     doc->displayPages(psOut, firstPage, lastPage, 72, 72,

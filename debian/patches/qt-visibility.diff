@@ -1,0 +1,29 @@
+Author: Pino Toscano <pino@debian.org>
+Description: Hidden visibility for poppler-qt4 and poppler-qt5
+ Enables the hidden visibility for poppler-qt4 and poppler-qt5, hiding all the
+ non-exported symbols.
+ .
+ The CXXFLAGS additions need to be added with proper configure check.
+Forwarded: no
+Last-Update: 2014-07-09
+
+--- a/qt4/src/Makefile.am
++++ b/qt4/src/Makefile.am
+@@ -56,6 +56,7 @@ libpoppler_qt4_la_SOURCES =			\
+ 	ArthurOutputDev.cc
+ 
+ libpoppler_qt4_la_CXXFLAGS = 			\
++	-fvisibility=hidden -fvisibility-inlines-hidden	\
+ 	-Dpoppler_qt4_EXPORTS
+ 
+ libpoppler_qt4_la_LIBADD = 			\
+--- a/qt5/src/Makefile.am
++++ b/qt5/src/Makefile.am
+@@ -56,6 +56,7 @@ libpoppler_qt5_la_SOURCES =			\
+ 	ArthurOutputDev.cc
+ 
+ libpoppler_qt5_la_CXXFLAGS = 			\
++	-fvisibility=hidden -fvisibility-inlines-hidden \
+ 	-Dpoppler_qt5_EXPORTS -fPIC
+ 
+ libpoppler_qt5_la_LIBADD = 			\

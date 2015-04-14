@@ -1,0 +1,11 @@
+Tests: cpp
+Depends: build-essential, pkg-config, realpath, libpoppler-cpp-dev, cups-filters
+
+Tests: glib
+Depends: build-essential, pkg-config, realpath, libpoppler-glib-dev, cups-filters
+
+Tests: qt4
+Depends: build-essential, pkg-config, realpath, libpoppler-qt4-dev, cups-filters
+
+Tests: qt5
+Depends: build-essential, pkg-config, realpath, libpoppler-qt5-dev, cups-filters

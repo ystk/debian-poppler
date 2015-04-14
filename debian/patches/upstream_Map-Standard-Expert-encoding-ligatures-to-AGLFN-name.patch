@@ -1,0 +1,161 @@
+From 01723aa17e836e818158dbdc56df642a290be300 Mon Sep 17 00:00:00 2001
+From: Adrian Johnson <ajohnson@redneon.com>
+Date: Tue, 30 Sep 2014 18:48:47 +0200
+Subject: [PATCH] Map Standard/Expert encoding ligatures to AGLFN names
+
+for use with substitute fonts that are not compatible with the
+Standard 14 fonts.
+
+Bug 80093
+---
+ poppler/CairoFontEngine.cc | 12 +++++++++---
+ poppler/GfxFont.cc         | 29 ++++++++++++++++++++++++++++-
+ poppler/GfxFont.h          |  7 ++++++-
+ splash/SplashFTFontFile.cc |  8 ++++++++
+ 4 files changed, 51 insertions(+), 5 deletions(-)
+
+diff --git a/poppler/CairoFontEngine.cc b/poppler/CairoFontEngine.cc
+index 1546594..4cf8d6b 100644
+--- a/poppler/CairoFontEngine.cc
++++ b/poppler/CairoFontEngine.cc
+@@ -21,7 +21,7 @@
+ // Copyright (C) 2006, 2007, 2010, 2011 Carlos Garcia Campos <carlosgc@gnome.org>
+ // Copyright (C) 2007 Koji Otani <sho@bbr.jp>
+ // Copyright (C) 2008, 2009 Chris Wilson <chris@chris-wilson.co.uk>
+-// Copyright (C) 2008, 2012 Adrian Johnson <ajohnson@redneon.com>
++// Copyright (C) 2008, 2012, 2014 Adrian Johnson <ajohnson@redneon.com>
+ // Copyright (C) 2009 Darren Kenny <darren.kenny@sun.com>
+ // Copyright (C) 2010 Suzuki Toshiya <mpsuzuki@hiroshima-u.ac.jp>
+ // Copyright (C) 2010 Jan Kümmel <jan+freedesktop@snorc.org>
+@@ -395,7 +395,7 @@ CairoFreeTypeFont *CairoFreeTypeFont::create(GfxFont *gfxFont, XRef *xref,
+   GfxFontType fontType;
+   GfxFontLoc *fontLoc;
+   char **enc;
+-  char *name;
++  const char *name;
+   FoFiTrueType *ff;
+   FoFiType1C *ff1c;
+   Ref ref;
+@@ -457,7 +457,13 @@ CairoFreeTypeFont *CairoFreeTypeFont::create(GfxFont *gfxFont, XRef *xref,
+     for (i = 0; i < 256; ++i) {
+       codeToGID[i] = 0;
+       if ((name = enc[i])) {
+-	codeToGID[i] = FT_Get_Name_Index(face, name);
++	codeToGID[i] = FT_Get_Name_Index(face, (char*)name);
++	if (codeToGID[i] == 0) {
++	  name = GfxFont::getAlternateName(name);
++	  if (name) {
++	    codeToGID[i] = FT_Get_Name_Index(face, (char*)name);
++	  }
++	}
+       }
+     }
+     break;
+diff --git a/poppler/GfxFont.cc b/poppler/GfxFont.cc
+index 6f6a125..39f026a 100644
+--- a/poppler/GfxFont.cc
++++ b/poppler/GfxFont.cc
+@@ -26,7 +26,7 @@
+ // Copyright (C) 2009 Peter Kerzum <kerzum@yandex-team.ru>
+ // Copyright (C) 2009, 2010 David Benjamin <davidben@mit.edu>
+ // Copyright (C) 2011 Axel Strübing <axel.struebing@freenet.de>
+-// Copyright (C) 2011, 2012 Adrian Johnson <ajohnson@redneon.com>
++// Copyright (C) 2011, 2012, 2014 Adrian Johnson <ajohnson@redneon.com>
+ // Copyright (C) 2012 Yi Yang <ahyangyi@gmail.com>
+ // Copyright (C) 2012 Suzuki Toshiya <mpsuzuki@hiroshima-u.ac.jp>
+ // Copyright (C) 2012 Thomas Freitag <Thomas.Freitag@alfa.de>
+@@ -913,6 +913,33 @@ char *GfxFont::readEmbFontFile(XRef *xref, int *len) {
+   return buf;
+ }
+ 
++
++struct AlternateNameMap {
++  const char *name;
++  const char *alt;
++};
++
++static const AlternateNameMap alternateNameMap[] =
++{
++  { "fi", "f_i" },
++  { "fl", "f_l" },
++  { "ff", "f_f" },
++  { "ffi", "f_f_i" },
++  { "ffl", "f_f_l" },
++  { 0,    0 }
++};
++
++const char *GfxFont::getAlternateName(const char *name) {
++  const AlternateNameMap *map = alternateNameMap;
++  while (map->name) {
++    if (strcmp(name, map->name) == 0) {
++      return map->alt;
++    }
++    map++;
++  }
++  return 0;
++}
++
+ //------------------------------------------------------------------------
+ // Gfx8BitFont
+ //------------------------------------------------------------------------
+diff --git a/poppler/GfxFont.h b/poppler/GfxFont.h
+index f980668..1be8975 100644
+--- a/poppler/GfxFont.h
++++ b/poppler/GfxFont.h
+@@ -20,7 +20,7 @@
+ // Copyright (C) 2007 Jeff Muizelaar <jeff@infidigm.net>
+ // Copyright (C) 2007 Koji Otani <sho@bbr.jp>
+ // Copyright (C) 2011 Axel Strübing <axel.struebing@freenet.de>
+-// Copyright (C) 2011, 2012 Adrian Johnson <ajohnson@redneon.com>
++// Copyright (C) 2011, 2012, 2014 Adrian Johnson <ajohnson@redneon.com>
+ //
+ // To see a description of the changes please see the Changelog file that
+ // came with your tarball or type make ChangeLog if you are building from git
+@@ -263,6 +263,11 @@ public:
+   // Return the name of the encoding
+   GooString *getEncodingName() { return encodingName; }
+ 
++  // Return AGLFN names of ligatures in the Standard and Expert encodings
++  // for use with fonts that are not compatible with the Standard 14 fonts.
++  // http://sourceforge.net/adobe/aglfn/wiki/AGL%20Specification/
++  static const char *getAlternateName(const char *name);
++
+ protected:
+ 
+   virtual ~GfxFont();
+diff --git a/splash/SplashFTFontFile.cc b/splash/SplashFTFontFile.cc
+index 34f6ce5..f0dcf50 100644
+--- a/splash/SplashFTFontFile.cc
++++ b/splash/SplashFTFontFile.cc
+@@ -12,6 +12,7 @@
+ // under GPL version 2 or later
+ //
+ // Copyright (C) 2006 Takashi Iwai <tiwai@suse.de>
++// Copyright (C) 2014 Adrian Johnson <ajohnson@redneon.com>
+ //
+ // To see a description of the changes please see the Changelog file that
+ // came with your tarball or type make ChangeLog if you are building from git
+@@ -28,6 +29,7 @@
+ 
+ #include "goo/gmem.h"
+ #include "goo/GooString.h"
++#include "poppler/GfxFont.h"
+ #include "SplashFTFontEngine.h"
+ #include "SplashFTFont.h"
+ #include "SplashFTFontFile.h"
+@@ -57,6 +59,12 @@ SplashFontFile *SplashFTFontFile::loadType1Font(SplashFTFontEngine *engineA,
+     codeToGIDA[i] = 0;
+     if ((name = encA[i])) {
+       codeToGIDA[i] = (int)FT_Get_Name_Index(faceA, (char *)name);
++      if (codeToGIDA[i] == 0) {
++	name = GfxFont::getAlternateName(name);
++	if (name) {
++	  codeToGIDA[i] = FT_Get_Name_Index(faceA, (char *)name);
++	}
++      }
+     }
+   }
+ 
+-- 
+2.1.1
+

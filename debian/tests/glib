@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+SRCDIR=$(dirname $(realpath $0))
+cd $ADTTMP
+gcc -Wall -Werror -std=c99 -o poppler-glib-test $SRCDIR/test-glib.c `pkg-config --cflags --libs poppler-glib`
+./poppler-glib-test "file:///usr/share/cups/data/default-testpage.pdf"

@@ -19,11 +19,13 @@
 // Copyright (C) 2009 Shen Liang <shenzhuxi@gmail.com>
 // Copyright (C) 2009 Stefan Thomas <thomas@eload24.com>
 // Copyright (C) 2009-2011 Albert Astals Cid <aacid@kde.org>
-// Copyright (C) 2010 Adrian Johnson <ajohnson@redneon.com>
+// Copyright (C) 2010, 2012 Adrian Johnson <ajohnson@redneon.com>
 // Copyright (C) 2010 Hib Eris <hib@hiberis.nl>
 // Copyright (C) 2010 Jonathan Liu <net147@gmail.com>
 // Copyright (C) 2010 William Bader <williambader@hotmail.com>
-// Copyright (C) 2011 Thomas Freitag <Thomas.Freitag@alfa.de>
+// Copyright (C) 2011-2013 Thomas Freitag <Thomas.Freitag@alfa.de>
+// Copyright (C) 2013 Adam Reichold <adamreichold@myopera.com>
+// Copyright (C) 2013 Suzuki Toshiya <mpsuzuki@hiroshima-u.ac.jp>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -49,7 +51,17 @@
 #include "splash/Splash.h"
 #include "SplashOutputDev.h"
 
-#define PPM_FILE_SZ 512
+// Uncomment to build pdftoppm with pthreads
+// You may also have to change the buildsystem to
+// link pdftoppm to pthread library
+// This is here for developer testing not user ready
+// #define UTILS_USE_PTHREADS 1
+
+#ifdef UTILS_USE_PTHREADS
+#include <errno.h>
+#include <pthread.h>
+#include <deque>
+#endif // UTILS_USE_PTHREADS
 
 static int firstPage = 1;
 static int lastPage = 0;
@@ -83,6 +95,11 @@ static char vectorAntialiasStr[16] = "";
 static char ownerPassword[33] = "";
 static char userPassword[33] = "";
 static char TiffCompressionStr[16] = "";
+static char thinLineModeStr[8] = "";
+static SplashThinLineMode thinLineMode = splashThinLineDefault;
+#ifdef UTILS_USE_PTHREADS
+static int numberOfJobs = 1;
+#endif // UTILS_USE_PTHREADS
 static GBool quiet = gFalse;
 static GBool printVersion = gFalse;
 static GBool printHelp = gFalse;
@@ -155,6 +172,8 @@ static const ArgDesc argDesc[] = {
   {"-freetype",   argString,      enableFreeTypeStr, sizeof(enableFreeTypeStr),
    "enable FreeType font rasterizer: yes, no"},
 #endif
+  {"-thinlinemode", argString, thinLineModeStr, sizeof(thinLineModeStr),
+   "set thin line mode: none, solid, shape. Default: none"},
   
   {"-aa",         argString,      antialiasStr,   sizeof(antialiasStr),
    "enable font anti-aliasing: yes, no"},
@@ -166,6 +185,11 @@ static const ArgDesc argDesc[] = {
   {"-upw",    argString,   userPassword,   sizeof(userPassword),
    "user password (for encrypted files)"},
   
+#ifdef UTILS_USE_PTHREADS
+  {"-j",      argInt,      &numberOfJobs,  0,
+   "number of jobs to run concurrently"},
+#endif // UTILS_USE_PTHREADS
+
   {"-q",      argFlag,     &quiet,         0,
    "don't print any messages or errors"},
   {"-v",      argFlag,     &printVersion,  0,
@@ -228,6 +252,54 @@ static void savePageSlice(PDFDoc *doc,
   }
 }
 
+#ifdef UTILS_USE_PTHREADS
+
+struct PageJob {
+  PDFDoc *doc;
+  int pg;
+  
+  double pg_w, pg_h;
+  SplashColor* paperColor;
+  
+  char *ppmFile;
+};
+
+static std::deque<PageJob> pageJobQueue;
+static pthread_mutex_t pageJobMutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void processPageJobs() {
+  while(true) {
+    // pop the next job or exit if queue is empty
+    pthread_mutex_lock(&pageJobMutex);
+    
+    if(pageJobQueue.empty()) {
+      pthread_mutex_unlock(&pageJobMutex);
+      return;
+    }
+    
+    PageJob pageJob = pageJobQueue.front();
+    pageJobQueue.pop_front();
+    
+    pthread_mutex_unlock(&pageJobMutex);
+    
+    // process the job    
+    SplashOutputDev *splashOut = new SplashOutputDev(mono ? splashModeMono1 :
+                  gray ? splashModeMono8 :
+#if SPLASH_CMYK
+        			    (jpegcmyk || overprint) ? splashModeDeviceN8 :
+#endif
+		              splashModeRGB8, 4, gFalse, *pageJob.paperColor, gTrue, gTrue, thinLineMode);
+    splashOut->startDoc(pageJob.doc);
+    
+    savePageSlice(pageJob.doc, splashOut, pageJob.pg, x, y, w, h, pageJob.pg_w, pageJob.pg_h, pageJob.ppmFile);
+    
+    delete splashOut;
+    delete[] pageJob.ppmFile;
+  }
+}
+
+#endif // UTILS_USE_PTHREADS
+
 static int numberOfCharacters(unsigned int n)
 {
   int charNum = 0;
@@ -244,10 +316,14 @@ int main(int argc, char *argv[]) {
   PDFDoc *doc;
   GooString *fileName = NULL;
   char *ppmRoot = NULL;
-  char ppmFile[PPM_FILE_SZ];
+  char *ppmFile;
   GooString *ownerPW, *userPW;
   SplashColor paperColor;
+#ifndef UTILS_USE_PTHREADS
   SplashOutputDev *splashOut;
+#else
+  pthread_t* jobs;
+#endif // UTILS_USE_PTHREADS
   GBool ok;
   int exitCode;
   int pg, pg_num_len;
@@ -297,6 +373,15 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Bad '-aaVector' value on command line\n");
     }
   }
+  if (thinLineModeStr[0]) {
+    if (strcmp(thinLineModeStr, "solid") == 0) {
+      thinLineMode = splashThinLineSolid;
+    } else if (strcmp(thinLineModeStr, "shape") == 0) {
+      thinLineMode = splashThinLineShape;
+    } else if (strcmp(thinLineModeStr, "none") != 0) {
+      fprintf(stderr, "Bad '-thinlinemode' value on command line\n");
+    }
+  }
   if (quiet) {
     globalParams->setErrQuiet(quiet);
   }
@@ -341,6 +426,12 @@ int main(int argc, char *argv[]) {
     lastPage = firstPage;
   if (lastPage < 1 || lastPage > doc->getNumPages())
     lastPage = doc->getNumPages();
+  if (lastPage < firstPage) {
+    fprintf(stderr,
+            "Wrong page range given: the first page (%d) can not be after the last page (%d).\n",
+            firstPage, lastPage);
+    goto err1;
+  }
 
   if (singleFile && firstPage < lastPage) {
     if (!quiet) {
@@ -354,10 +445,9 @@ int main(int argc, char *argv[]) {
   // write PPM files
 #if SPLASH_CMYK
   if (jpegcmyk || overprint) {
-    paperColor[0] = 0;
-    paperColor[1] = 0;
-    paperColor[2] = 0;
-    paperColor[3] = 0;
+    globalParams->setOverprintPreview(gTrue);
+    for (int cp = 0; cp < SPOT_NCOMPS+4; cp++)
+      paperColor[cp] = 0;
   } else 
 #endif
   {
@@ -365,14 +455,20 @@ int main(int argc, char *argv[]) {
     paperColor[1] = 255;
     paperColor[2] = 255;
   }
+  
+#ifndef UTILS_USE_PTHREADS
+
   splashOut = new SplashOutputDev(mono ? splashModeMono1 :
 				    gray ? splashModeMono8 :
 #if SPLASH_CMYK
-				    (jpegcmyk || overprint) ? splashModeCMYK8 :
+				    (jpegcmyk || overprint) ? splashModeDeviceN8 :
 #endif
 				             splashModeRGB8, 4,
-				  gFalse, paperColor);
-  splashOut->startDoc(doc->getXRef());
+				  gFalse, paperColor, gTrue, gTrue, thinLineMode);
+  splashOut->startDoc(doc);
+  
+#endif // UTILS_USE_PTHREADS
+  
   if (sz != 0) w = h = sz;
   pg_num_len = numberOfCharacters(doc->getNumPages());
   for (pg = firstPage; pg <= lastPage; ++pg) {
@@ -390,11 +486,15 @@ int main(int argc, char *argv[]) {
       resolution = (72.0 * scaleTo) / (pg_w > pg_h ? pg_w : pg_h);
       x_resolution = y_resolution = resolution;
     } else {
-      if (x_scaleTo != 0) {
+      if (x_scaleTo > 0) {
         x_resolution = (72.0 * x_scaleTo) / pg_w;
+        if (y_scaleTo == -1)
+          y_resolution = x_resolution;
       }
-      if (y_scaleTo != 0) {
+      if (y_scaleTo > 0) {
         y_resolution = (72.0 * y_scaleTo) / pg_h;
+        if (x_scaleTo == -1)
+          x_resolution = y_resolution;
       }
     }
     pg_w = pg_w * (x_resolution / 72.0);
@@ -407,18 +507,62 @@ int main(int argc, char *argv[]) {
     if (ppmRoot != NULL) {
       const char *ext = png ? "png" : (jpeg || jpegcmyk) ? "jpg" : tiff ? "tif" : mono ? "pbm" : gray ? "pgm" : "ppm";
       if (singleFile) {
-        snprintf(ppmFile, PPM_FILE_SZ, "%.*s.%s",
-              PPM_FILE_SZ - 32, ppmRoot, ext);
+        ppmFile = new char[strlen(ppmRoot) + 1 + strlen(ext) + 1];
+        sprintf(ppmFile, "%s.%s", ppmRoot, ext);
       } else {
-        snprintf(ppmFile, PPM_FILE_SZ, "%.*s-%0*d.%s",
-              PPM_FILE_SZ - 32, ppmRoot, pg_num_len, pg, ext);
+        ppmFile = new char[strlen(ppmRoot) + 1 + pg_num_len + 1 + strlen(ext) + 1];
+        sprintf(ppmFile, "%s-%0*d.%s", ppmRoot, pg_num_len, pg, ext);
       }
-      savePageSlice(doc, splashOut, pg, x, y, w, h, pg_w, pg_h, ppmFile);
     } else {
-      savePageSlice(doc, splashOut, pg, x, y, w, h, pg_w, pg_h, NULL);
+      ppmFile = NULL;
+    }
+#ifndef UTILS_USE_PTHREADS
+    // process job in main thread
+    savePageSlice(doc, splashOut, pg, x, y, w, h, pg_w, pg_h, ppmFile);
+    
+    delete[] ppmFile;
+#else
+    
+    // queue job for worker threads
+    PageJob pageJob = {
+      .doc = doc,
+      .pg = pg,
+      
+      .pg_w = pg_w, .pg_h = pg_h,
+      
+      .paperColor = &paperColor,
+      
+      .ppmFile = ppmFile
+    };
+    
+    pageJobQueue.push_back(pageJob);
+    
+#endif // UTILS_USE_PTHREADS
+  }
+#ifndef UTILS_USE_PTHREADS
+  delete splashOut;
+#else
+  
+  // spawn worker threads and wait on them
+  jobs = (pthread_t*)malloc(numberOfJobs * sizeof(pthread_t));
+
+  for(int i=0; i < numberOfJobs; ++i) {
+    if(pthread_create(&jobs[i], NULL, (void* (*)(void*))processPageJobs, NULL) != 0) {
+	    fprintf(stderr, "pthread_create() failed with errno: %d\n", errno);
+	    exit(EXIT_FAILURE);
     }
   }
-  delete splashOut;
+  
+  for(int i=0; i < numberOfJobs; ++i) {
+    if(pthread_join(jobs[i], NULL) != 0) {
+      fprintf(stderr, "pthread_join() failed with errno: %d\n", errno);
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  free(jobs);
+  
+#endif // UTILS_USE_PTHREADS
 
   exitCode = 0;
 

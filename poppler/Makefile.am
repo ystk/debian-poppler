@@ -15,24 +15,6 @@ splash_libs =					\
 
 endif
 
-if BUILD_POPPLER_QT4
-
-poppler_arthur = libpoppler-arthur.la
-
-libpoppler_arthur_la_SOURCES =			\
-	ArthurOutputDev.h			\
-	ArthurOutputDev.cc
-
-arthur_includes =				\
-	$(POPPLER_QT4_CFLAGS)
-
-arthur_libs =					\
-	$(POPPLER_QT4_LIBS)
-
-endif
-
-
-
 if BUILD_CAIRO_OUTPUT
 
 poppler_cairo = libpoppler-cairo.la
@@ -61,6 +43,8 @@ libjpeg_sources =				\
 
 libjpeg_libs =					\
 	$(LIBJPEG_LIBS)
+libjpeg_includes =				\
+	$(LIBJPEG_CFLAGS)
 
 endif
 
@@ -90,6 +74,8 @@ libjpeg2000_sources =				\
 
 libjpeg2000_libs =				\
 	$(LIBOPENJPEG_LIBS)
+libjpeg2000_includes =				\
+	$(LIBOPENJPEG_CFLAGS)
 
 else
 
@@ -140,8 +126,9 @@ INCLUDES =					\
 	$(cms_includes)				\
 	$(splash_includes)			\
 	$(cairo_includes)			\
-	$(arthur_includes)			\
+	$(libjpeg_includes)			\
 	$(libtiff_includes)			\
+	$(libjpeg2000_includes)			\
 	$(libpng_includes)			\
 	$(libcurl_includes)			\
 	$(FREETYPE_CFLAGS)			\
@@ -149,8 +136,7 @@ INCLUDES =					\
 
 lib_LTLIBRARIES = libpoppler.la
 
-noinst_LTLIBRARIES = $(poppler_cairo)		\
-	$(poppler_arthur)
+noinst_LTLIBRARIES = $(poppler_cairo)
 
 CFLAGS+=$(PTHREAD_CFLAGS)
 CXXFLAGS+=$(PTHREAD_CFLAGS)
@@ -171,7 +157,7 @@ libpoppler_la_LIBADD =				\
 	$(PTHREAD_LIBS)				\
 	$(win32_libs)
 
-libpoppler_la_LDFLAGS = -version-info 19:0:0 @create_shared_lib@ @auto_import_flags@
+libpoppler_la_LDFLAGS = -version-info 46:0:0 @create_shared_lib@ @auto_import_flags@
 
 if ENABLE_XPDF_HEADERS
 
@@ -230,6 +216,8 @@ poppler_include_HEADERS =	\
 	StdinPDFDocBuilder.h	\
 	Stream-CCITT.h		\
 	Stream.h		\
+	StructElement.h		\
+	StructTreeRoot.h	\
 	UnicodeMap.h		\
 	UnicodeMapTables.h	\
 	UnicodeTypeTable.h	\
@@ -244,7 +232,9 @@ poppler_include_HEADERS =	\
 	NameToUnicodeTable.h	\
 	PSOutputDev.h		\
 	TextOutputDev.h		\
+	MarkedContentOutputDev.h \
 	SecurityHandler.h	\
+	UTF.h			\
 	UTF8.h			\
 	XpdfPluginAPI.h		\
 	Sound.h
@@ -255,7 +245,6 @@ endif
 libpoppler_la_SOURCES =		\
 	$(splash_sources)	\
 	$(cairo_sources)	\
-	$(arthur_sources)	\
 	$(libjpeg_sources)	\
 	$(zlib_sources)		\
 	$(libjpeg2000_sources)	\
@@ -308,13 +297,17 @@ libpoppler_la_SOURCES =		\
 	StdinCachedFile.cc	\
 	StdinPDFDocBuilder.cc	\
 	Stream.cc 		\
+	StructTreeRoot.cc	\
+	StructElement.cc	\
 	strtok_r.cpp		\
 	UnicodeMap.cc		\
 	UnicodeTypeTable.cc	\
+	UTF.cc                  \
 	ViewerPreferences.cc	\
 	XRef.cc			\
 	PSOutputDev.cc		\
 	TextOutputDev.cc	\
+	MarkedContentOutputDev.cc \
 	PageLabelInfo.h		\
 	PageLabelInfo.cc	\
 	SecurityHandler.cc	\
@@ -322,4 +315,5 @@ libpoppler_la_SOURCES =		\
 	XpdfPluginAPI.cc
 
 EXTRA_DIST = gen-unicode-tables.py	\
-             GlobalParamsWin.cc
+             GlobalParamsWin.cc         \
+             PageLabelInfo_p.h

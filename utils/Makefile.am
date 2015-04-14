@@ -16,13 +16,11 @@ INCLUDES =					\
 	-I$(top_srcdir)/utils			\
 	-I$(top_srcdir)/poppler			\
 	$(UTILS_CFLAGS)				\
-	$(FONTCONFIG_CFLAGS)			\
 	$(PDFTOCAIRO_CFLAGS)
 
 LDADD =						\
 	$(top_builddir)/poppler/libpoppler.la	\
-	$(UTILS_LIBS)				\
-	$(FONTCONFIG_LIBS)
+	$(UTILS_LIBS)
 
 if BUILD_CAIRO_OUTPUT
 
@@ -37,7 +35,9 @@ endif
 
 pdftocairo_LDADD =				\
 	$(top_builddir)/poppler/libpoppler-cairo.la \
-	$(LDADD) $(PDFTOCAIRO_LIBS)
+	$(LDADD)				\
+	$(PDFTOCAIRO_LIBS)			\
+	$(PTHREAD_LIBS)
 
 
 pdftocairo_binary = pdftocairo
@@ -49,6 +49,7 @@ endif
 AM_LDFLAGS = @auto_import_flags@
 
 bin_PROGRAMS =					\
+	pdfdetach				\
 	pdffonts				\
 	pdfimages				\
 	pdfinfo					\
@@ -61,6 +62,7 @@ bin_PROGRAMS =					\
 	$(pdftocairo_binary)
 
 dist_man1_MANS =				\
+	pdfdetach.1				\
 	pdffonts.1				\
 	pdfimages.1				\
 	pdfinfo.1				\
@@ -74,6 +76,10 @@ dist_man1_MANS =				\
 
 common = parseargs.cc parseargs.h
 
+pdfdetach_SOURCES = 				\
+	pdfdetach.cc				\
+	$(common)
+
 pdffonts_SOURCES =				\
 	pdffonts.cc				\
 	$(common)
@@ -82,12 +88,16 @@ pdfimages_SOURCES =				\
 	pdfimages.cc				\
 	ImageOutputDev.cc			\
 	ImageOutputDev.h			\
+	JSInfo.cc				\
+	JSInfo.h				\
 	$(common)
 
 pdfinfo_SOURCES =				\
 	pdfinfo.cc				\
 	printencodings.cc			\
 	printencodings.h			\
+	JSInfo.cc				\
+	JSInfo.h				\
 	$(common)
 
 pdftops_SOURCES =				\
@@ -110,6 +120,12 @@ pdftohtml_SOURCES =				\
 	HtmlOutputDev.h				\
 	HtmlUtils.h				\
 	$(common)
+
+# HtmlOutputDev uses goo/PNGWriter.h that may depend on libpng header
+pdftohtml_CXXFLAGS = $(AM_CXXFLAGS)
+if BUILD_LIBPNG
+pdftohtml_CXXFLAGS += $(LIBPNG_CFLAGS)
+endif
 
 pdfseparate_SOURCES =				\
 	pdfseparate.cc				\

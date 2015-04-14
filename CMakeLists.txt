@@ -13,22 +13,25 @@ include(MacroBoolTo01)
 find_package(Threads)
 include(TestBigEndian)
 test_big_endian(WORDS_BIGENDIAN)
+include(CheckFileOffsetBits)
+CHECK_FILE_OFFSET_BITS()
 
 set(POPPLER_MAJOR_VERSION "0")
-set(POPPLER_MINOR_VERSION "18")
-set(POPPLER_MICRO_VERSION "4")
+set(POPPLER_MINOR_VERSION "26")
+set(POPPLER_MICRO_VERSION "5")
 set(POPPLER_VERSION "${POPPLER_MAJOR_VERSION}.${POPPLER_MINOR_VERSION}.${POPPLER_MICRO_VERSION}")
 
 # command line switches
 option(ENABLE_XPDF_HEADERS "Install unsupported xpdf headers." OFF)
 option(BUILD_GTK_TESTS "Whether compile the GTK+ test programs." ON)
 option(BUILD_QT4_TESTS "Whether compile the Qt4 test programs." ON)
+option(BUILD_QT5_TESTS "Whether compile the Qt5 test programs." ON)
 option(BUILD_CPP_TESTS "Whether compile the CPP test programs." ON)
 option(ENABLE_SPLASH "Build the Splash graphics backend." ON)
 option(ENABLE_UTILS "Compile poppler command line utils." ON)
 option(ENABLE_CPP "Compile poppler cpp wrapper." ON)
 option(ENABLE_LIBOPENJPEG "Use libopenjpeg for JPX streams." ON)
-option(ENABLE_LCMS "Use liblcms for color management." ON)
+set(ENABLE_CMS "auto" CACHE STRING "Use color management system. Possible values: auto, lcms1, lcms2. 'auto' prefers lcms2 over lcms1 if both are available. Unset to disable color management system.")
 option(ENABLE_LIBCURL "Build libcurl based HTTP support." OFF)
 option(ENABLE_ZLIB "Build with zlib (not totally safe)." OFF)
 option(USE_FIXEDPOINT "Use fixed point arithmetic in the Splash backend" OFF)
@@ -40,6 +43,25 @@ else(WIN32)
 endif(WIN32)
 
 set(LIB_SUFFIX "" CACHE STRING "Define suffix of directory name (32/64)")
+
+set(TESTDATADIR "${CMAKE_SOURCE_DIR}/../test" CACHE STRING "Specify test data dir.")
+if(NOT (EXISTS ${TESTDATADIR} AND EXISTS ${TESTDATADIR}/test-poppler.c))
+  message(WARNING "
+ No test data found in $testdatadir.
+ You will not be able to run 'make test' successfully.
+
+ The test data is not included in the source packages
+ and is also not part of the main git repository. Instead,
+ you can checkout the test data from its own git
+ repository with:
+
+   git clone git://git.freedesktop.org/git/poppler/test
+
+ You should checkout the test data as a sibling of your
+ poppler source folder or specify the location of your
+ checkout with -DTESTDATADIR=/path/to/checkoutdir/test.
+  ")
+endif()
 
 if(WIN32)
   set(_default_fontconfiguration "win32")
@@ -64,7 +86,7 @@ set(OPI_SUPPORT ON)
 set(TEXTOUT_WORD_LIST ON)
 
 # setting the minimum required versions for some components
-set(QT4_MIN_VERSION "4.4.0")
+set(QT4_MIN_VERSION "4.7.0")
 set(CAIRO_VERSION "1.10.0")
 set(GLIB_REQUIRED "2.18")
 
@@ -80,6 +102,23 @@ if(JPEG_FOUND)
   set(ENABLE_LIBJPEG ${JPEG_FOUND})
 endif(JPEG_FOUND)
 macro_optional_find_package(Qt4)
+if(${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}.${CMAKE_PATCH_VERSION} VERSION_GREATER 2.8.7)
+  find_package(Qt5Core)
+  find_package(Qt5Gui)
+  find_package(Qt5Xml)
+  find_package(Qt5Widgets)
+  find_package(Qt5Test)
+  if (Qt5Core_FOUND AND Qt5Gui_FOUND AND Qt5Xml_FOUND AND Qt5Widgets_FOUND AND Qt5Test_FOUND)
+    set(QT5_FOUND true)
+  else ()
+    message("-- Package Qt5Core or Qt5Gui or Qt5Xml or Qt5Widgets or Qt5Test not found")
+    set(QT5_FOUND false)
+  endif()
+else(${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}.${CMAKE_PATCH_VERSION} VERSION_GREATER 2.8.7)
+  set(QT5_FOUND false)
+  message("-- CMake >= 2.8.8 is needed to enable Qt5")
+endif(${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}.${CMAKE_PATCH_VERSION} VERSION_GREATER 2.8.7)
+
 macro_optional_find_package(Cairo ${CAIRO_VERSION})
 if(CAIRO_FOUND)
   set(HAVE_CAIRO ${CAIRO_FOUND})
@@ -117,10 +156,22 @@ if(ENABLE_LIBOPENJPEG)
   set(ENABLE_LIBOPENJPEG ${LIBOPENJPEG_FOUND})
   set(HAVE_OPENJPEG_H ON)
 endif(ENABLE_LIBOPENJPEG)
-if(ENABLE_LCMS)
+if(ENABLE_CMS STREQUAL "auto")
+  find_package(LCMS2)
+  set(USE_CMS ${LCMS2_FOUND})
+  if(NOT LCMS2_FOUND)
+    find_package(LCMS)
+    set(USE_CMS ${LCMS_FOUND})
+    set(USE_LCMS1 ${LCMS_FOUND})
+  endif(NOT LCMS2_FOUND)
+elseif(ENABLE_CMS STREQUAL "lcms1")
   find_package(LCMS)
   set(USE_CMS ${LCMS_FOUND})
-endif(ENABLE_LCMS)
+  set(USE_LCMS1 ${LCMS_FOUND})
+elseif(ENABLE_CMS STREQUAL "lcms2")
+  find_package(LCMS2)
+  set(USE_CMS ${LCMS2_FOUND})
+endif()
 if(ENABLE_LIBCURL)
   find_package(CURL)
   include_directories(${CURL_INCLUDE_DIR})
@@ -128,6 +179,10 @@ if(ENABLE_LIBCURL)
 endif(ENABLE_LIBCURL)
 
 add_definitions(-DHAVE_CONFIG_H=1)
+if(MINGW)
+  # Use mingw's ansi stdio extensions
+  add_definitions(-D__USE_MINGW_ANSI_STDIO=1)
+endif(MINGW)
 if(FONTCONFIG_FOUND)
   add_definitions(${FONTCONFIG_DEFINITIONS})
   include_directories(${FONTCONFIG_INCLUDE_DIR})
@@ -173,6 +228,9 @@ endif(LIBOPENJPEG_FOUND)
 if(LCMS_FOUND)
   include_directories(${LCMS_INCLUDE_DIR})
 endif(LCMS_FOUND)
+if(LCMS2_FOUND)
+  include_directories(${LCMS2_INCLUDE_DIR})
+endif(LCMS2_FOUND)
 
 if(DEFINED COMPILE_WARNINGS)
 else(DEFINED COMPILE_WARNINGS)
@@ -183,9 +241,11 @@ if(_comp_warnings STREQUAL "no")
   set(CMAKE_CXX_FLAGS "${DEFAULT_COMPILE_WARNINGS_NO} ${CMAKE_CXX_FLAGS}")
 endif(_comp_warnings STREQUAL "no")
 if(_comp_warnings STREQUAL "yes")
+  set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
   set(CMAKE_CXX_FLAGS "${DEFAULT_COMPILE_WARNINGS_YES} ${CMAKE_CXX_FLAGS}")
 endif(_comp_warnings STREQUAL "yes")
 if(_comp_warnings STREQUAL "kde")
+  set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
   set(CMAKE_CXX_FLAGS "${DEFAULT_COMPILE_WARNINGS_KDE} ${CMAKE_CXX_FLAGS}")
 endif(_comp_warnings STREQUAL "kde")
 
@@ -204,16 +264,19 @@ set(poppler_SRCS
   goo/GooString.cc
   goo/gmem.cc
   goo/FixedPoint.cc
+  goo/NetPBMWriter.cc
   goo/PNGWriter.cc
   goo/TiffWriter.cc
   goo/JpegWriter.cc
   goo/ImgWriter.cc
   goo/gstrtod.cc
+  goo/grandom.cc
   fofi/FoFiBase.cc
   fofi/FoFiEncodings.cc
   fofi/FoFiTrueType.cc
   fofi/FoFiType1.cc
   fofi/FoFiType1C.cc
+  fofi/FoFiIdentifier.cc
   poppler/Annot.cc
   poppler/Array.cc
   poppler/BuiltinFont.cc
@@ -242,6 +305,7 @@ set(poppler_SRCS
   poppler/Link.cc
   poppler/Linearization.cc
   poppler/LocalPDFDocBuilder.cc
+  poppler/MarkedContentOutputDev.cc
   poppler/NameToCharCode.cc
   poppler/Object.cc
   poppler/OptionalContent.cc
@@ -258,9 +322,12 @@ set(poppler_SRCS
   poppler/PreScanOutputDev.cc
   poppler/PSTokenizer.cc
   poppler/Stream.cc
+  poppler/StructTreeRoot.cc
+  poppler/StructElement.cc
   poppler/strtok_r.cpp
   poppler/UnicodeMap.cc
   poppler/UnicodeTypeTable.cc
+  poppler/UTF.cc
   poppler/XRef.cc
   poppler/PSOutputDev.cc
   poppler/TextOutputDev.cc
@@ -332,7 +399,12 @@ else (LIBOPENJPEG_FOUND)
   )
 endif(LIBOPENJPEG_FOUND)
 if(USE_CMS)
-  set(poppler_LIBS ${poppler_LIBS} ${LCMS_LIBRARIES})
+  if(LCMS_FOUND)
+    set(poppler_LIBS ${poppler_LIBS} ${LCMS_LIBRARIES})
+  endif(LCMS_FOUND)
+  if(LCMS2_FOUND)
+    set(poppler_LIBS ${poppler_LIBS} ${LCMS2_LIBRARIES})
+  endif(LCMS2_FOUND)
 endif(USE_CMS)
 if(WIN32)
   # gdi32 is needed under win32
@@ -344,6 +416,9 @@ endif(PNG_FOUND)
 if(TIFF_FOUND)
   set(poppler_LIBS ${poppler_LIBS} ${TIFF_LIBRARIES})
 endif(TIFF_FOUND)
+if(HAVE_PTHREAD)
+  set(poppler_LIBS ${poppler_LIBS} ${CMAKE_THREAD_LIBS_INIT})
+endif()
 
 if(MSVC)
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
@@ -352,7 +427,7 @@ add_library(poppler STATIC ${poppler_SRCS})
 else(MSVC)
 add_library(poppler SHARED ${poppler_SRCS})
 endif(MSVC)
-set_target_properties(poppler PROPERTIES VERSION 19.0.0 SOVERSION 19)
+set_target_properties(poppler PROPERTIES VERSION 46.0.0 SOVERSION 46)
 target_link_libraries(poppler ${poppler_LIBS})
 target_link_libraries(poppler LINK_INTERFACE_LIBRARIES "")
 install(TARGETS poppler RUNTIME DESTINATION bin LIBRARY DESTINATION lib${LIB_SUFFIX} ARCHIVE DESTINATION lib${LIB_SUFFIX})
@@ -389,6 +464,7 @@ if(ENABLE_XPDF_HEADERS)
     poppler/Link.h
     poppler/Linearization.h
     poppler/LocalPDFDocBuilder.h
+    poppler/MarkedContentOutputDev.h
     poppler/Movie.h
     poppler/NameToCharCode.h
     poppler/Object.h
@@ -409,6 +485,8 @@ if(ENABLE_XPDF_HEADERS)
     poppler/Rendition.h
     poppler/Stream-CCITT.h
     poppler/Stream.h
+    poppler/StructElement.h
+    poppler/StructTreeRoot.h
     poppler/UnicodeMap.h
     poppler/UnicodeMapTables.h
     poppler/UnicodeTypeTable.h
@@ -426,6 +504,7 @@ if(ENABLE_XPDF_HEADERS)
     poppler/SecurityHandler.h
     poppler/StdinCachedFile.h
     poppler/StdinPDFDocBuilder.h
+    poppler/UTF.h
     poppler/UTF8.h
     poppler/XpdfPluginAPI.h
     poppler/Sound.h
@@ -444,6 +523,7 @@ if(ENABLE_XPDF_HEADERS)
     goo/ImgWriter.h
     goo/GooLikely.h
     goo/gstrtod.h
+    goo/grandom.h
     DESTINATION include/poppler/goo)
   if(PNG_FOUND)
     install(FILES
@@ -455,12 +535,18 @@ if(ENABLE_XPDF_HEADERS)
       goo/TiffWriter.h
       DESTINATION include/poppler/goo)
   endif(TIFF_FOUND)
+  if(JPEG_FOUND)
+    install(FILES
+      goo/JpegWriter.h
+      DESTINATION include/poppler/goo)
+  endif(JPEG_FOUND)
   install(FILES
     fofi/FoFiBase.h
     fofi/FoFiEncodings.h
     fofi/FoFiTrueType.h
     fofi/FoFiType1.h
     fofi/FoFiType1C.h
+    fofi/FoFiIdentifier.h
     DESTINATION include/poppler/fofi)
   if(ENABLE_LIBCURL)
     install(FILES
@@ -472,9 +558,6 @@ if(ENABLE_XPDF_HEADERS)
     install(FILES
       poppler/JPEG2000Stream.h
       DESTINATION include/poppler)
-    install(FILES
-      goo/JpegWriter.h
-      DESTINATION include/poppler/goo)
   else(LIBOPENJPEG_FOUND)
     install(FILES
       poppler/JPXStream.h
@@ -523,6 +606,9 @@ add_subdirectory(test)
 if(QT4_FOUND)
   add_subdirectory(qt4)
 endif(QT4_FOUND)
+if(QT5_FOUND)
+  add_subdirectory(qt5)
+endif(QT5_FOUND)
 if(ENABLE_CPP)
   add_subdirectory(cpp)
 endif(ENABLE_CPP)
@@ -547,6 +633,9 @@ endif(ENABLE_SPLASH)
 if(QT4_FOUND)
   poppler_create_install_pkgconfig(poppler-qt4.pc lib${LIB_SUFFIX}/pkgconfig)
 endif(QT4_FOUND)
+if(QT5_FOUND)
+  poppler_create_install_pkgconfig(poppler-qt5.pc lib${LIB_SUFFIX}/pkgconfig)
+endif(QT5_FOUND)
 if(ENABLE_GLIB)
   poppler_create_install_pkgconfig(poppler-glib.pc lib${LIB_SUFFIX}/pkgconfig)
 endif(ENABLE_GLIB)
@@ -563,6 +652,7 @@ show_end_message("font configuration" ${font_configuration})
 show_end_message_yesno("splash output" ENABLE_SPLASH)
 show_end_message_yesno("cairo output" CAIRO_FOUND)
 show_end_message_yesno("qt4 wrapper" QT4_FOUND)
+show_end_message_yesno("qt5 wrapper" QT5_FOUND)
 show_end_message_yesno("glib wrapper" ENABLE_GLIB)
 show_end_message_yesno("  introspection" INTROSPECTION_FOUND)
 show_end_message_yesno("cpp wrapper" ENABLE_CPP)
@@ -574,7 +664,14 @@ show_end_message_yesno("use zlib" ENABLE_ZLIB)
 show_end_message_yesno("use curl" ENABLE_LIBCURL)
 show_end_message_yesno("use libopenjpeg" LIBOPENJPEG_FOUND)
 show_end_message_yesno("use cms" USE_CMS)
+if(LCMS_FOUND)
+  message("      with lcms1")
+endif(LCMS_FOUND)
+if(LCMS2_FOUND)
+  message("      with lcms2")
+endif(LCMS2_FOUND)
 show_end_message_yesno("command line utils" ENABLE_UTILS)
+show_end_message("test data dir" ${TESTDATADIR})
 
 if(USE_FIXEDPOINT AND USE_FLOAT)
   message("Warning: Single precision and fixed point options should not be enabled at the same time")

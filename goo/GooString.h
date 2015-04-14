@@ -17,7 +17,9 @@
 //
 // Copyright (C) 2006 Kristian Høgsberg <krh@redhat.com>
 // Copyright (C) 2006 Krzysztof Kowalczyk <kkowalczyk@gmail.com>
-// Copyright (C) 2008-2010 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2008-2010, 2012 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2012-2014 Fabio D'Urso <fabiodurso@hotmail.it>
+// Copyright (C) 2013 Jason Crain <jason@aquaticape.us>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -31,9 +33,16 @@
 #pragma interface
 #endif
 
+#include <limits.h> // for LLONG_MAX and ULLONG_MAX
 #include <stdarg.h>
 #include <stdlib.h> // for NULL
 #include "gtypes.h"
+
+#ifdef __clang__
+# define GOOSTRING_FORMAT __attribute__((__annotate__("gooformat")))
+#else
+# define GOOSTRING_FORMAT
+#endif
 
 class GooString {
 public:
@@ -79,17 +88,23 @@ public:
   // - <precision> is the number of digits to the right of the decimal
   //   point (for floating point numbers)
   // - <type> is one of:
-  //     d, x, o, b -- int in decimal, hex, octal, binary
-  //     ud, ux, uo, ub -- unsigned int
-  //     ld, lx, lo, lb, uld, ulx, ulo, ulb -- long, unsigned long
-  //     f, g -- double
-  //     c -- char
+  //     d, x, X, o, b -- int in decimal, lowercase hex, uppercase hex, octal, binary
+  //     ud, ux, uX, uo, ub -- unsigned int
+  //     ld, lx, lX, lo, lb, uld, ulx, ulX, ulo, ulb -- long, unsigned long
+  //     lld, llx, llX, llo, llb, ulld, ullx, ullX, ullo, ullb
+  //         -- long long, unsigned long long
+  //     f, g, gs -- floating point (float or double)
+  //         f  -- always prints trailing zeros (eg 1.0 with .2f will print 1.00)
+  //         g  -- omits trailing zeros and, if possible, the dot (eg 1.0 shows up as 1)
+  //         gs -- is like g, but treats <precision> as number of significant
+  //               digits to show (eg 0.0123 with .2gs will print 0.012)
+  //     c -- character (char, short or int)
   //     s -- string (char *)
   //     t -- GooString *
   //     w -- blank space; arg determines width
   // To get literal curly braces, use {{ or }}.
-  static GooString *format(char *fmt, ...);
-  static GooString *formatv(char *fmt, va_list argList);
+  static GooString *format(const char *fmt, ...) GOOSTRING_FORMAT;
+  static GooString *formatv(const char *fmt, va_list argList);
 
   // Destructor.
   ~GooString();
@@ -115,8 +130,8 @@ public:
   GooString *append(const char *str, int lengthA=CALC_STRING_LEN);
 
   // Append a formatted string.
-  GooString *appendf(char *fmt, ...);
-  GooString *appendfv(char *fmt, va_list argList);
+  GooString *appendf(const char *fmt, ...) GOOSTRING_FORMAT;
+  GooString *appendfv(const char *fmt, va_list argList);
 
   // Insert a character or string.
   GooString *insert(int i, char c);
@@ -135,6 +150,9 @@ public:
   int cmpN(GooString *str, int n) const;
   int cmp(const char *sA) const;
   int cmpN(const char *sA, int n) const;
+
+  // Return true if string ends with suffix
+  GBool endsWith(const char *suffix) const;
 
   GBool hasUnicodeMarker(void);
 
@@ -164,12 +182,24 @@ private:
   char *s;
 
   void resize(int newLength);
+#ifdef LLONG_MAX
+  static void formatInt(long long x, char *buf, int bufSize,
+			GBool zeroFill, int width, int base,
+			char **p, int *len, GBool upperCase = gFalse);
+#else
   static void formatInt(long x, char *buf, int bufSize,
 			GBool zeroFill, int width, int base,
-			char **p, int *len);
+			char **p, int *len, GBool upperCase = gFalse);
+#endif
+#ifdef ULLONG_MAX
+  static void formatUInt(unsigned long long x, char *buf, int bufSize,
+			 GBool zeroFill, int width, int base,
+			 char **p, int *len, GBool upperCase = gFalse);
+#else
   static void formatUInt(Gulong x, char *buf, int bufSize,
 			 GBool zeroFill, int width, int base,
-			 char **p, int *len);
+			 char **p, int *len, GBool upperCase = gFalse);
+#endif
   static void formatDouble(double x, char *buf, int bufSize, int prec,
 			   GBool trim, char **p, int *len);
   static void formatDoubleSmallAware(double x, char *buf, int bufSize, int prec,

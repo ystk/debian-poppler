@@ -3,7 +3,6 @@ INCLUDES = 					\
 	-I$(top_builddir)/glib			\
 	$(GTK_TEST_CFLAGS)			\
 	$(POPPLER_GLIB_DISABLE_DEPRECATED)	\
-	-DGTK_DISABLE_DEPRECATED		\
 	$(POPPLER_GLIB_DISABLE_SINGLE_INCLUDES)
 
 AM_LDFLAGS = @auto_import_flags@
@@ -43,6 +42,8 @@ poppler_glib_demo_SOURCES = 			\
 	selections.h				\
 	selections.c				\
 	text.h					\
+	taggedstruct.h				\
+	taggedstruct.c				\
 	text.c					\
 	transitions.h				\
 	transitions.c				\
