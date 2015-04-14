@@ -6,6 +6,7 @@
 //
 // Copyright 2008-2010, 2012 Albert Astals Cid <aacid@kde.org>
 // Copyright 2011 Daniel Glöckner <daniel-gl@gmx.net>
+// Copyright 2013 Adrian Johnson <ajohnson@redneon.com>
 //
 // Licensed under GPLv2 or later
 //
@@ -46,7 +47,7 @@ void JPXStream::close() {
   }
 }
 
-int JPXStream::getPos() {
+Goffset JPXStream::getPos() {
   return counter * ncomps + ccounter;
 }
 
@@ -115,11 +116,11 @@ void JPXStream::init()
 }
 
 static void libopenjpeg_error_callback(const char *msg, void * /*client_data*/) {
-  error(-1, "%s", msg);
+  error(errSyntaxError, -1, "{0:s}", msg);
 }
 
 static void libopenjpeg_warning_callback(const char *msg, void * /*client_data*/) {
-  error(-1, "%s", msg);
+  error(errSyntaxWarning, -1, "{0:s}", msg);
 }
 
 void JPXStream::init2(unsigned char *buf, int bufLen, OPJ_CODEC_FORMAT format)
@@ -164,13 +165,13 @@ void JPXStream::init2(unsigned char *buf, int bufLen, OPJ_CODEC_FORMAT format)
 
 error:
   if (format == CODEC_JP2) {
-    error(-1, "Did no succeed opening JPX Stream as JP2, trying as J2K.");
+    error(errSyntaxWarning, -1, "Did no succeed opening JPX Stream as JP2, trying as J2K.");
     init2(buf, bufLen, CODEC_J2K);
   } else if (format == CODEC_J2K) {
-    error(-1, "Did no succeed opening JPX Stream as J2K, trying as JPT.");
+    error(errSyntaxWarning, -1, "Did no succeed opening JPX Stream as J2K, trying as JPT.");
     init2(buf, bufLen, CODEC_JPT);
   } else {
-    error(-1, "Did no succeed opening JPX Stream.");
+    error(errSyntaxError, -1, "Did no succeed opening JPX Stream.");
   }
 }
 
@@ -178,7 +179,7 @@ int JPXStream::lookChar() {
   return doLookChar();
 }
 
-GooString *JPXStream::getPSFilter(int psLevel, char *indent) {
+GooString *JPXStream::getPSFilter(int psLevel, const char *indent) {
   return NULL;
 }
 

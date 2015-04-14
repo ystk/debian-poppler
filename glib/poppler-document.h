@@ -20,6 +20,7 @@
 #define __POPPLER_DOCUMENT_H__
 
 #include <glib-object.h>
+#include <gio/gio.h>
 #include "poppler.h"
 
 G_BEGIN_DECLS
@@ -172,6 +173,15 @@ PopplerDocument   *poppler_document_new_from_data          (char            *dat
 							    int              length,
 							    const char      *password,
 							    GError         **error);
+PopplerDocument   *poppler_document_new_from_stream        (GInputStream    *stream,
+                                                            goffset          length,
+                                                            const char      *password,
+                                                            GCancellable    *cancellable,
+                                                            GError         **error);
+PopplerDocument   *poppler_document_new_from_gfile         (GFile           *file,
+                                                            const char      *password,
+                                                            GCancellable    *cancellable,
+                                                            GError         **error);
 gboolean           poppler_document_save                   (PopplerDocument *document,
 							    const char      *uri,
 							    GError         **error);
@@ -246,8 +256,10 @@ PopplerFontsIter *poppler_fonts_iter_copy          (PopplerFontsIter  *iter);
 void              poppler_fonts_iter_free          (PopplerFontsIter  *iter);
 const char       *poppler_fonts_iter_get_name      (PopplerFontsIter  *iter);
 const char       *poppler_fonts_iter_get_full_name (PopplerFontsIter  *iter);
+const char       *poppler_fonts_iter_get_substitute_name (PopplerFontsIter *iter);
 const char       *poppler_fonts_iter_get_file_name (PopplerFontsIter  *iter);
 PopplerFontType   poppler_fonts_iter_get_font_type (PopplerFontsIter  *iter);
+const char       *poppler_fonts_iter_get_encoding  (PopplerFontsIter *iter);
 gboolean	  poppler_fonts_iter_is_embedded   (PopplerFontsIter  *iter);
 gboolean	  poppler_fonts_iter_is_subset     (PopplerFontsIter  *iter);
 gboolean          poppler_fonts_iter_next          (PopplerFontsIter  *iter);

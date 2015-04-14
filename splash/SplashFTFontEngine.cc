@@ -12,7 +12,7 @@
 // under GPL version 2 or later
 //
 // Copyright (C) 2006 Takashi Iwai <tiwai@suse.de>
-// Copyright (C) 2009, 2011 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2009, 2011, 2012 Albert Astals Cid <aacid@kde.org>
 // Copyright (C) 2009 Petr Gajdos <pgajdos@novell.com>
 // Copyright (C) 2011 Andreas Hartmetz <ahartmetz@gmail.com>
 //
@@ -45,14 +45,6 @@
 #if (__VMS_VER < 70000000)
 extern "C" int unlink(char *filename);
 #endif
-#endif
-
-//------------------------------------------------------------------------
-
-#if 0
-static void fileWrite(void *stream, char *data, int len) {
-  fwrite(data, 1, len, (FILE *)stream);
-}
 #endif
 
 //------------------------------------------------------------------------
@@ -90,26 +82,26 @@ SplashFTFontEngine::~SplashFTFontEngine() {
 
 SplashFontFile *SplashFTFontEngine::loadType1Font(SplashFontFileID *idA,
 						  SplashFontSrc *src,
-						  char **enc) {
+						  const char **enc) {
   return SplashFTFontFile::loadType1Font(this, idA, src, enc);
 }
 
 SplashFontFile *SplashFTFontEngine::loadType1CFont(SplashFontFileID *idA,
 						   SplashFontSrc *src,
-						   char **enc) {
+						   const char **enc) {
   return SplashFTFontFile::loadType1Font(this, idA, src, enc);
 }
 
 SplashFontFile *SplashFTFontEngine::loadOpenTypeT1CFont(SplashFontFileID *idA,
 							SplashFontSrc *src,
-							char **enc) {
+							const char **enc) {
   return SplashFTFontFile::loadType1Font(this, idA, src, enc);
 }
 
 SplashFontFile *SplashFTFontEngine::loadCIDFont(SplashFontFileID *idA,
 						SplashFontSrc *src) {
   FoFiType1C *ff;
-  Gushort *cidToGIDMap;
+  int *cidToGIDMap;
   int nCIDs;
   SplashFontFile *ret;
 
@@ -139,29 +131,34 @@ SplashFontFile *SplashFTFontEngine::loadCIDFont(SplashFontFileID *idA,
 }
 
 SplashFontFile *SplashFTFontEngine::loadOpenTypeCFFFont(SplashFontFileID *idA,
-							SplashFontSrc *src) {
+							SplashFontSrc *src,
+                                                        int *codeToGID,
+                                                        int codeToGIDLen) {
   FoFiTrueType *ff;
-  Gushort *cidToGIDMap;
+  int *cidToGIDMap;
   int nCIDs;
   SplashFontFile *ret;
 
   cidToGIDMap = NULL;
   nCIDs = 0;
-  if (!useCIDs) {
-    if (src->isFile) {
-      ff = FoFiTrueType::load(src->fileName->getCString());
-    } else {
-      ff = FoFiTrueType::make(src->buf, src->bufLen);
-    }
-    if (ff) {
-      if (ff->isOpenTypeCFF()) {
-	cidToGIDMap = ff->getCIDToGIDMap(&nCIDs);
+  if (!codeToGID) {
+    if (!useCIDs) {
+      if (src->isFile) {
+        ff = FoFiTrueType::load(src->fileName->getCString());
+      } else {
+        ff = FoFiTrueType::make(src->buf, src->bufLen);
       }
-      delete ff;
+      if (ff) {
+        if (ff->isOpenTypeCFF()) {
+          cidToGIDMap = ff->getCIDToGIDMap(&nCIDs);
+        }
+        delete ff;
+      }
     }
   }
   ret = SplashFTFontFile::loadCIDFont(this, idA, src,
-				      cidToGIDMap, nCIDs);
+                                      codeToGID ? codeToGID : cidToGIDMap,
+                                      codeToGID ? codeToGIDLen : nCIDs);
   if (!ret) {
     gfree(cidToGIDMap);
   }
@@ -170,46 +167,14 @@ SplashFontFile *SplashFTFontEngine::loadOpenTypeCFFFont(SplashFontFileID *idA,
 
 SplashFontFile *SplashFTFontEngine::loadTrueTypeFont(SplashFontFileID *idA,
 						     SplashFontSrc *src,
-						     Gushort *codeToGID,
+						     int *codeToGID,
 						     int codeToGIDLen,
 						     int faceIndex) {
-#if 0
-  FoFiTrueType *ff;
-  GooString *tmpFileName;
-  FILE *tmpFile;
-  SplashFontFile *ret;
-
-  if (!(ff = FoFiTrueType::load(fileName))) {
-    return NULL;
-  }
-  tmpFileName = NULL;
-  if (!openTempFile(&tmpFileName, &tmpFile, "wb")) {
-    delete ff;
-    return NULL;
-  }
-  ff->writeTTF(&fileWrite, tmpFile);
-  delete ff;
-  fclose(tmpFile);
-  ret = SplashFTFontFile::loadTrueTypeFont(this, idA,
-					   tmpFileName->getCString(),
-					   gTrue, codeToGID, codeToGIDLen,
-					   faceIndex);
-  if (ret) {
-    if (deleteFile) {
-      unlink(fileName);
-    }
-  } else {
-    unlink(tmpFileName->getCString());
-  }
-  delete tmpFileName;
-  return ret;
-#else
   SplashFontFile *ret;
   ret = SplashFTFontFile::loadTrueTypeFont(this, idA, src,
 					   codeToGID, codeToGIDLen,
 					   faceIndex);
   return ret;
-#endif
 }
 
 #endif // HAVE_FREETYPE_FREETYPE_H || HAVE_FREETYPE_H

@@ -1,7 +1,27 @@
 INCLUDES =					\
 	-I$(top_srcdir)				\
 	-I$(top_srcdir)/goo			\
-	-I$(top_srcdir)/poppler
+	-I$(top_srcdir)/poppler			\
+	$(libjpeg_includes)			\
+	$(libtiff_includes)			\
+	$(libjpeg2000_includes)			\
+	$(libpng_includes)
+
+if BUILD_LIBJPEG
+libjpeg_includes = $(LIBJPEG_CFLAGS)
+endif
+
+if BUILD_LIBTIFF
+libtiff_includes = $(LIBTIFF_CFLAGS)
+endif
+
+if BUILD_LIBOPENJPEG
+libjpeg2000_includes = $(LIBOPENJPEG_CFLAGS)
+endif
+
+if BUILD_LIBPNG
+libpng_includes = $(LIBPNG_CFLAGS)
+endif
 
 SUBDIRS = . tests
 
@@ -21,8 +41,6 @@ poppler_include_HEADERS =			\
 
 lib_LTLIBRARIES = libpoppler-cpp.la
 libpoppler_cpp_la_SOURCES =			\
-	PNMWriter.cc				\
-	PNMWriter.h				\
 	poppler-document.cpp			\
 	poppler-document-private.h		\
 	poppler-embedded-file.cpp		\

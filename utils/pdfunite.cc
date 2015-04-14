@@ -4,10 +4,15 @@
 //
 // This file is licensed under the GPLv2 or later
 //
-// Copyright (C) 2011 Thomas Freitag <Thomas.Freitag@alfa.de>
+// Copyright (C) 2011-2014 Thomas Freitag <Thomas.Freitag@alfa.de>
 // Copyright (C) 2012 Arseny Solokha <asolokha@gmx.com>
+// Copyright (C) 2012 Fabio D'Urso <fabiodurso@hotmail.it>
+// Copyright (C) 2012 Albert Astals Cid <aacid@kde.org>
+// Copyright (C) 2013 Adrian Johnson <ajohnson@redneon.com>
+// Copyright (C) 2013 Hib Eris <hib@hiberis.nl>
 //
 //========================================================================
+
 #include <PDFDoc.h>
 #include <GlobalParams.h>
 #include "parseargs.h"
@@ -55,7 +60,8 @@ int main (int argc, char *argv[])
   int exitCode;
 
   exitCode = 99;
-  if (argc <= 3 || printVersion || printHelp) {
+  const GBool ok = parseArgs (argDesc, &argc, argv);
+  if (!ok || argc < 3 || printVersion || printHelp) {
     fprintf(stderr, "pdfunite version %s\n", PACKAGE_VERSION);
     fprintf(stderr, "%s\n", popplerCopyright);
     fprintf(stderr, "%s\n", xpdfCopyright);
@@ -84,16 +90,16 @@ int main (int argc, char *argv[])
         }
       }
     } else if (doc->isOk()) {
-      error(-1, "Could not merge encrypted files ('%s')", argv[i]);
+      error(errUnimplemented, -1, "Could not merge encrypted files ('{0:s}')", argv[i]);
       return -1;
     } else {
-      error(-1, "Could not merge damaged documents ('%s')", argv[i]);
+      error(errSyntaxError, -1, "Could not merge damaged documents ('{0:s}')", argv[i]);
       return -1;
     }
   }
 
   if (!(f = fopen(fileName, "wb"))) {
-    error(-1, "Could not open file '%s'", fileName);
+    error(errIO, -1, "Could not open file '{0:s}'", fileName);
     return -1;
   }
   outStr = new FileOutStream(f, 0);
@@ -114,12 +120,24 @@ int main (int argc, char *argv[])
       Ref *refPage = docs[i]->getCatalog()->getPageRef(j);
       Object page;
       docs[i]->getXRef()->fetch(refPage->num, refPage->gen, &page);
+      Dict *pageDict = page.getDict();
+      Dict *resDict = docs[i]->getCatalog()->getPage(j)->getResourceDict();
+      if (resDict) {
+        Object *newResource = new Object();
+        newResource->initDict(resDict);
+        pageDict->set("Resources", newResource);
+      }
       pages.push_back(page);
       offsets.push_back(numOffset);
-      Dict *pageDict = page.getDict();
       docs[i]->markPageObjects(pageDict, yRef, countRef, numOffset);
+      Object annotsObj;
+      pageDict->lookupNF("Annots", &annotsObj);
+      if (!annotsObj.isNull()) {
+        docs[i]->markAnnotations(&annotsObj, yRef, countRef, numOffset, refPage->num, refPage->num);
+        annotsObj.free();
+      }
     }
-    objectsCount += docs[i]->writePageObjects(outStr, yRef, numOffset);
+    objectsCount += docs[i]->writePageObjects(outStr, yRef, numOffset, gTrue);
     numOffset = yRef->getNumObjects() + 1;
   }
 
@@ -135,7 +153,7 @@ int main (int argc, char *argv[])
   outStr->printf("<< /Type /Pages /Kids [");
   for (j = 0; j < (int) pages.size(); j++)
     outStr->printf(" %d 0 R", rootNum + j + 2);
-  outStr->printf(" ] /Count %d >>\nendobj\n", pages.size());
+  outStr->printf(" ] /Count %zd >>\nendobj\n", pages.size());
   objectsCount++;
 
   for (i = 0; i < (int) pages.size(); i++) {
@@ -153,21 +171,22 @@ int main (int argc, char *argv[])
         outStr->printf("/Parent %d 0 R", rootNum + 1);
       } else {
         outStr->printf("/%s ", key);
-        PDFDoc::writeObject(&value, NULL, outStr, yRef, offsets[i]);
+        PDFDoc::writeObject(&value, outStr, yRef, offsets[i], NULL, cryptRC4, 0, 0, 0);
       }
       value.free();
     }
     outStr->printf(" >>\nendobj\n");
     objectsCount++;
   }
-  Guint uxrefOffset = outStr->getPos();
-  yRef->writeToFile(outStr, gFalse /* do not write unnecessary entries */ );
-
+  Goffset uxrefOffset = outStr->getPos();
   Ref ref;
   ref.num = rootNum;
   ref.gen = 0;
-  PDFDoc::writeTrailer(uxrefOffset, objectsCount, outStr, (GBool) gFalse, 0,
-	&ref, yRef, fileName, outStr->getPos());
+  Dict *trailerDict = PDFDoc::createTrailerDict(objectsCount, gFalse, 0, &ref, yRef,
+                                                fileName, outStr->getPos());
+  PDFDoc::writeXRefTableTrailer(trailerDict, yRef, gFalse /* do not write unnecessary entries */,
+                                uxrefOffset, outStr, yRef);
+  delete trailerDict;
 
   outStr->close();
   fclose(f);

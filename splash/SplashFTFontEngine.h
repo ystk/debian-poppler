@@ -15,6 +15,7 @@
 // Copyright (C) 2009 Petr Gajdos <pgajdos@novell.com>
 // Copyright (C) 2009 Albert Astals Cid <aacid@kde.org>
 // Copyright (C) 2011 Andreas Hartmetz <ahartmetz@gmail.com>
+// Copyright (C) 2013 Thomas Freitag <Thomas.Freitag@alfa.de>
 //
 // To see a description of the changes please see the Changelog file that
 // came with your tarball or type make ChangeLog if you are building from git
@@ -50,13 +51,16 @@ public:
   ~SplashFTFontEngine();
 
   // Load fonts.
-  SplashFontFile *loadType1Font(SplashFontFileID *idA, SplashFontSrc *src,  char **enc);
-  SplashFontFile *loadType1CFont(SplashFontFileID *idA, SplashFontSrc *src,  char **enc);
-  SplashFontFile *loadOpenTypeT1CFont(SplashFontFileID *idA, SplashFontSrc *src,  char **enc);
+  SplashFontFile *loadType1Font(SplashFontFileID *idA, SplashFontSrc *src,  const char **enc);
+  SplashFontFile *loadType1CFont(SplashFontFileID *idA, SplashFontSrc *src,  const char **enc);
+  SplashFontFile *loadOpenTypeT1CFont(SplashFontFileID *idA, SplashFontSrc *src,  const char **enc);
   SplashFontFile *loadCIDFont(SplashFontFileID *idA, SplashFontSrc *src);
-  SplashFontFile *loadOpenTypeCFFFont(SplashFontFileID *idA, SplashFontSrc *src);
+  SplashFontFile *loadOpenTypeCFFFont(SplashFontFileID *idA, SplashFontSrc *src,
+                                      int *codeToGID, int codeToGIDLen);
   SplashFontFile *loadTrueTypeFont(SplashFontFileID *idA, SplashFontSrc *src,
-				   Gushort *codeToGID, int codeToGIDLen, int faceIndex = 0);
+				   int *codeToGID, int codeToGIDLen, int faceIndex = 0);
+  GBool getAA() { return aa; }
+  void setAA(GBool aaA) { aa = aaA; }
 
 private:
 

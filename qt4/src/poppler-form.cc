@@ -1,7 +1,8 @@
 /* poppler-form.h: qt4 interface to poppler
  * Copyright (C) 2007-2008, 2011, Pino Toscano <pino@kde.org>
- * Copyright (C) 2008, 2011, Albert Astals Cid <aacid@kde.org>
+ * Copyright (C) 2008, 2011, 2012 Albert Astals Cid <aacid@kde.org>
  * Copyright (C) 2011 Carlos Garcia Campos <carlosgc@gnome.org>
+ * Copyright (C) 2012, Adam Reichold <adamreichold@myopera.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,26 +36,18 @@
 
 namespace {
 
-Qt::Alignment formTextAlignment(Object *obj)
+Qt::Alignment formTextAlignment(::FormWidget *fm)
 {
-  Object tmp;
-  int align = 0;
-  if (obj->dictLookup("Q", &tmp)->isInt())
+  Qt::Alignment qtalign = Qt::AlignLeft;
+  switch (fm->getField()->getTextQuadding())
   {
-    align = tmp.getInt();
-  }
-  tmp.free();
-  Qt::Alignment qtalign;
-  switch (align)
-  {
-    case 1:
+    case quaddingCentered:
       qtalign = Qt::AlignHCenter;
       break;
-    case 2:
+    case quaddingRightJustified:
       qtalign = Qt::AlignRight;
       break;
-    case 0:
-    default:
+    case quaddingLeftJustified:
       qtalign = Qt::AlignLeft;
   }
   return qtalign;
@@ -90,22 +83,6 @@ FormField::FormField(FormFieldData &dd)
   QPointF bottomRight;
   XPDFReader::transform( MTX, qMax( left, right ), qMin( top, bottom ), bottomRight );
   m_formData->box = QRectF(topLeft, QSizeF(bottomRight.x() - topLeft.x(), bottomRight.y() - topLeft.y()));
-
-  Dict *dict = m_formData->fm->getObj()->getDict();
-  Object tmp;
-
-  // reading the flags
-  if (dict->lookup("Ff", &tmp)->isInt())
-  {
-    m_formData->flags = tmp.getInt();
-  }
-  tmp.free();
-  // reading the widget annotation flags
-  if (dict->lookup("F", &tmp)->isInt())
-  {
-    m_formData->annoflags = tmp.getInt();
-  }
-  tmp.free();
 }
 
 FormField::~FormField()
@@ -139,7 +116,7 @@ QString FormField::fullyQualifiedName() const
   QString name;
   if (GooString *goo = m_formData->fm->getFullyQualifiedName())
   {
-    name = QString::fromLatin1(goo->getCString());
+    name = UnicodeParsedString(goo);
   }
   return name;
 }
@@ -161,7 +138,7 @@ bool FormField::isReadOnly() const
 
 bool FormField::isVisible() const
 {
-  return !(m_formData->annoflags & (1 << 1));
+  return !(m_formData->fm->getWidgetAnnotation()->getFlags() & Annot::flagHidden);
 }
 
 Link* FormField::activationAction() const
@@ -250,13 +227,20 @@ void FormFieldButton::setState( bool state )
 QList<int> FormFieldButton::siblings() const
 {
   FormWidgetButton* fwb = static_cast<FormWidgetButton*>(m_formData->fm);
+  ::FormFieldButton* ffb = static_cast< ::FormFieldButton* >(fwb->getField());
   if (fwb->getButtonType() == formButtonPush)
     return QList<int>();
 
   QList<int> ret;
-  unsigned *sibls = fwb->getSiblingsID();
-  for (int i = 0; i < fwb->getNumSiblingsID(); ++i)
-    ret.append(sibls[i]);
+  for (int i = 0; i < ffb->getNumSiblings(); ++i)
+  {
+    ::FormFieldButton* sibling = static_cast< ::FormFieldButton* >(ffb->getSibling(i));
+    for (int j = 0; j < sibling->getNumWidgets(); ++j)
+    {
+        FormWidget *w = sibling->getWidget(j);
+        if (w) ret.append(w->getID());
+    }
+  }
 
   return ret;
 }
@@ -321,7 +305,7 @@ int FormFieldText::maximumLength() const
 
 Qt::Alignment FormFieldText::textAlignment() const
 {
-  return formTextAlignment(m_formData->fm->getObj());
+  return formTextAlignment(m_formData->fm);
 }
 
 bool FormFieldText::canBeSpellChecked() const
@@ -373,7 +357,6 @@ bool FormFieldChoice::isEditable() const
 
 bool FormFieldChoice::multiSelect() const
 {
-//  return m_formData->flags & (1 << 21);
   FormWidgetChoice* fwc = static_cast<FormWidgetChoice*>(m_formData->fm);
   return !fwc->isCombo() ? fwc->isMultiSelect() : false;
 }
@@ -397,9 +380,31 @@ void FormFieldChoice::setCurrentChoices( const QList<int> &choice )
     fwc->select( choice.at( i ) );
 }
 
+QString FormFieldChoice::editChoice() const
+{
+  FormWidgetChoice* fwc = static_cast<FormWidgetChoice*>(m_formData->fm);
+  
+  if ( fwc->isCombo() && fwc->hasEdit() )
+    return UnicodeParsedString(fwc->getEditChoice());
+  else
+    return QString();
+}
+
+void FormFieldChoice::setEditChoice(const QString& text)
+{
+  FormWidgetChoice* fwc = static_cast<FormWidgetChoice*>(m_formData->fm);
+  
+  if ( fwc->isCombo() && fwc->hasEdit() )
+  {
+    GooString* goo = QStringToUnicodeGooString( text );
+    fwc->setEditChoice( goo );
+    delete goo;
+  }
+}
+
 Qt::Alignment FormFieldChoice::textAlignment() const
 {
-  return formTextAlignment(m_formData->fm->getObj());
+  return formTextAlignment(m_formData->fm);
 }
 
 bool FormFieldChoice::canBeSpellChecked() const
