@@ -1,2 +1,3 @@
 upstream_Map-Standard-Expert-encoding-ligatures-to-AGLFN-name.patch
 qt-visibility.diff
+upstream_Do-not-crash-on-invalid-files.patch

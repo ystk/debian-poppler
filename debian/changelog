@@ -1,3 +1,11 @@
+poppler (0.26.5-2+deb8u1) jessie-security; urgency=medium
+
+  * Backport upstream commit b3425dd3261679958cd56c0f71995c15d2124433 to fix
+    a crash on invalid files, reported also as CVE-2015-8868; patch
+    upstream_Do-not-crash-on-invalid-files.patch. (Closes: #822578)
+
+ -- Pino Toscano <pino@debian.org>  Mon, 25 Apr 2016 19:02:11 +0200
+
 poppler (0.26.5-2) unstable; urgency=medium
 
   * Backport upstream commit 01723aa17e836e818158dbdc56df642a290be300 to map
