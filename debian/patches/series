@@ -1,3 +1,17 @@
 upstream_Map-Standard-Expert-encoding-ligatures-to-AGLFN-name.patch
 qt-visibility.diff
 upstream_Do-not-crash-on-invalid-files.patch
+upstream_CVE-2017-9406.patch
+upstream_CVE-2017-9408.patch
+upstream_CVE-2017-9775-fix-stack-buffer-overflow.patch
+upstream_CVE-2017-9776.patch
+upstream_CVE-2017-9865.patch
+upstream_CVE-2017-14517.patch
+upstream_CVE-2017-14518.patch
+CVE-2017-14519.patch
+upstream_CVE-2017-14520.patch
+upstream_CVE-2017-14617.patch
+upstream_CVE-2017-14975.patch
+upstream_CVE-2017-14976.patch
+upstream_CVE-2017-14977.patch
+upstream_CVE-2017-15565.patch
