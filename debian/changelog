@@ -1,3 +1,11 @@
+poppler (0.26.5-2+deb8u3) jessie-security; urgency=medium
+
+  * Fix regression in fix for CVE-2017-14519
+  * CVE-2017-1000456
+  * CVE-2017-14929
+
+ -- Moritz Muehlenhoff <jmm@debian.org>  Tue, 22 Jan 2018 23:45:05 +0100
+
 poppler (0.26.5-2+deb8u2) jessie-security; urgency=medium
 
   * Fix CVE-2017-9406: a memory leak vulnerability was found in the function

@@ -15,3 +15,5 @@ upstream_CVE-2017-14975.patch
 upstream_CVE-2017-14976.patch
 upstream_CVE-2017-14977.patch
 upstream_CVE-2017-15565.patch
+CVE-2017-1000456.patch
+fix-CVE-2017-14519.patch
