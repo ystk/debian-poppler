@@ -1,3 +1,12 @@
+poppler (0.26.5-2+deb8u4) jessie-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * Correct patch for CVE-2017-9776.
+    Fixes "[regression] Broken rendering of scan PDF from Xerox WorkCentre
+    5945". (Closes: #890826)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Thu, 12 Apr 2018 11:19:50 +0200
+
 poppler (0.26.5-2+deb8u3) jessie-security; urgency=medium
 
   * Fix regression in fix for CVE-2017-14519
