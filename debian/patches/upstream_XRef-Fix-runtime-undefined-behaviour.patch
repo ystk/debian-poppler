@@ -1,0 +1,47 @@
+From 8429a67536b7c2f6d752e4a522ee98e6f76a40f9 Mon Sep 17 00:00:00 2001
+From: Albert Astals Cid <aacid@kde.org>
+Date: Tue, 1 May 2018 02:44:37 +0200
+Subject: [PATCH] XRef: Fix runtime undefined behaviour
+
+Going to the position -1 of an array is undefined behaviour, so don't do
+it
+
+Bug #105970
+---
+ poppler/XRef.cc | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+--- a/poppler/XRef.cc
++++ b/poppler/XRef.cc
+@@ -977,11 +977,11 @@
+           if ((*p & 0xff) == 0) {
+             //new line, continue with next line!
+             str->getLine(buf, 256);
+-            p = buf - 1;
+-          }
+-	  do {
++            p = buf;
++          } else {
+ 	    ++p;
+-	  } while (*p && isspace(*p & 0xff));
++	  }
++	  while (*p && isspace(*p & 0xff)) ++p;
+ 	  if (isdigit(*p & 0xff)) {
+ 	    gen = atoi(p);
+ 	    do {
+@@ -991,11 +991,11 @@
+               if ((*p & 0xff) == 0) {
+                 //new line, continue with next line!
+                 str->getLine(buf, 256);
+-                p = buf - 1;
+-              }
+-	      do {
++                p = buf;
++              } else {
+ 		++p;
+-	      } while (*p && isspace(*p & 0xff));
++	      }
++	      while (*p && isspace(*p & 0xff)) ++p;
+ 	      if (!strncmp(p, "obj", 3)) {
+ 		if (num >= size) {
+ 		  newSize = (num + 1 + 255) & ~255;

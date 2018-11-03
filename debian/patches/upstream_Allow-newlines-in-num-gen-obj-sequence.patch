@@ -1,0 +1,48 @@
+From 1cc93886eee3204e2ccd8bcc8b90306e809255e0 Mon Sep 17 00:00:00 2001
+From: Thomas Freitag <Thomas.Freitag@alfa.de>
+Date: Thu, 28 Apr 2016 23:53:06 +0200
+Subject: [PATCH] Allow newlines in '<num> <gen> obj' sequence
+
+Bug #94756
+---
+ poppler/XRef.cc | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+--- a/poppler/XRef.cc
++++ b/poppler/XRef.cc
+@@ -973,7 +973,12 @@
+ 	do {
+ 	  ++p;
+ 	} while (*p && isdigit(*p & 0xff));
+-	if (isspace(*p & 0xff)) {
++	if ((*p & 0xff) == 0 || isspace(*p & 0xff)) {
++          if ((*p & 0xff) == 0) {
++            //new line, continue with next line!
++            str->getLine(buf, 256);
++            p = buf - 1;
++          }
+ 	  do {
+ 	    ++p;
+ 	  } while (*p && isspace(*p & 0xff));
+@@ -982,7 +987,12 @@
+ 	    do {
+ 	      ++p;
+ 	    } while (*p && isdigit(*p & 0xff));
+-	    if (isspace(*p & 0xff)) {
++	    if ((*p & 0xff) == 0 || isspace(*p & 0xff)) {
++              if ((*p & 0xff) == 0) {
++                //new line, continue with next line!
++                str->getLine(buf, 256);
++                p = buf - 1;
++              }
+ 	      do {
+ 		++p;
+ 	      } while (*p && isspace(*p & 0xff));
+@@ -1254,6 +1264,7 @@
+ 
+  err:
+   if (!xRefStream && !xrefReconstructed) {
++    error(errInternal, -1, "xref num {0:d} not found but needed, try to reconstruct\n", num);
+     rootNum = -1;
+     constructXRef(&xrefReconstructed);
+     return fetch(num, gen, obj, ++recursion);

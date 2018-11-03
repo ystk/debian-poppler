@@ -1,3 +1,25 @@
+poppler (0.26.5-2+deb8u5) jessie-security; urgency=medium
+
+  * Non-maintainer upload by the LTS Team.
+  * CVE-2018-16646: Handle duplicate objects more robustly. Prohibit
+    DoS attacks via crafted PDF files causing inifinite recursions.
+    (Closes: #909802). This fix adds the following patches:
+    + upstream_Fix-rendering-of-some-broken-PDF-files.patch
+    + upstream_Allow-newlines-in-num-gen-obj-sequence.patch
+    + upstream_XRef-Fix-runtime-undefined-behaviour.patch
+    + upstream_CVE-2018-16646_Fail-when-PDF-contains-duplicate-objects.patch
+    + upstream_CVE-2018-16646_Allow-duplicated-objects-in-incremental-updates.
+      patch
+  * CVE-2018-10768: Fix crash on AnnotInk::draw for malformed documents.
+  * CVE-2017-18267: FoFiType1C::cvtGlyph: Fix infinite recursion on malformed
+    documents. (Closes: #898357).
+  * CVE-2018-13988.patch: Fix crash when Object has negative number. Specs say,
+    number has be > 0 and gen >= 0. Original upstream patch backported to old
+    Object API:
+    + upstream-modified_CVE-2018-13988.patch
+
+ -- Mike Gabriel <sunweaver@debian.org>  Wed, 31 Oct 2018 12:47:07 +0100
+
 poppler (0.26.5-2+deb8u4) jessie-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
