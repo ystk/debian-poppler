@@ -1,3 +1,11 @@
+poppler (0.26.5-2+deb8u6) jessie-security; urgency=medium
+
+  * CVE-2018-16646: Regression fix. Apply the patch from
+    upstream's MR #91 (which got merged upstream) and not
+    the proposed patches from MR #67.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Thu, 08 Nov 2018 11:38:57 +0100
+
 poppler (0.26.5-2+deb8u5) jessie-security; urgency=medium
 
   * Non-maintainer upload by the LTS Team.
