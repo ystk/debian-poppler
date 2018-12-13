@@ -21,6 +21,8 @@ upstream_Fix-rendering-of-some-broken-PDF-files.patch
 upstream_Allow-newlines-in-num-gen-obj-sequence.patch
 upstream_XRef-Fix-runtime-undefined-behaviour.patch
 upstream_CVE-2018-16646.patch
+upstream_CVE-2018-16646-regfix1.patch
+upstream_CVE-2018-16646-regfix2.patch
 upstream_CVE-2018-10768.patch
 upstream_CVE-2017-18267.patch
 upstream-modified_CVE-2018-13988.patch

@@ -1,5 +1,15 @@
+poppler (0.26.5-2+deb8u7) jessie-security; urgency=medium
+
+  * Non-maintainer upload by the LTS Team.
+  * CVE-2018-16646: Add regression fix patches from upstream:
+    + upstream_CVE-2018-16646-regfix1.patch
+    + upstream_CVE-2018-16646-regfix2.patch
+
+ -- Mike Gabriel <sunweaver@debian.org>  Wed, 12 Dec 2018 15:55:59 +0100
+
 poppler (0.26.5-2+deb8u6) jessie-security; urgency=medium
 
+  * Non-maintainer upload by the LTS Team.
   * CVE-2018-16646: Regression fix. Apply the patch from
     upstream's MR #91 (which got merged upstream) and not
     the proposed patches from MR #67.
