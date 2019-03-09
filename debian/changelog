@@ -1,3 +1,32 @@
+poppler (0.26.5-2+deb8u8) jessie-security; urgency=high
+
+  * Non-maintainer upload by the LTS team.
+  * Fix CVE-2018-19058:
+    A reachable abort in Object.h will lead to denial of service because
+    EmbFile::save2 in FileSpec.cc lacks a stream check before saving an
+    embedded file.
+  * Fix CVE-2018-20481:
+    Poppler mishandles unallocated XRef entries, which allows remote attackers
+    to cause a denial-of-service (NULL pointer dereference) via a crafted PDF
+    document.
+  * Fix CVE-2018-20662:
+    Poppler allows attackers to cause a denial-of-service (application crash
+    and segmentation fault by crafting a PDF file in which an xref data
+    structure is corrupted.
+  * Fix CVE-2019-7310:
+    A heap-based buffer over-read (due to an integer signedness error in the
+    XRef::getEntry function in XRef.cc) allows remote attackers to cause a
+    denial of service (application crash) or possibly have unspecified other
+    impact via a crafted PDF document.
+  * Fix CVE-2019-9200:
+    A heap-based buffer underwrite exists in ImageStream::getLine() located at
+    Stream.cc that can (for example) be triggered by sending
+    a crafted PDF file to the pdfimages binary. It allows an attacker to cause
+    denial-of-service (segmentation fault) or possibly have unspecified other
+    impact.
+
+ -- Markus Koschany <apo@debian.org>  Fri, 08 Mar 2019 19:09:06 +0100
+
 poppler (0.26.5-2+deb8u7) jessie-security; urgency=medium
 
   * Non-maintainer upload by the LTS Team.

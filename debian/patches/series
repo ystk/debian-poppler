@@ -26,3 +26,8 @@ upstream_CVE-2018-16646-regfix2.patch
 upstream_CVE-2018-10768.patch
 upstream_CVE-2017-18267.patch
 upstream-modified_CVE-2018-13988.patch
+CVE-2018-19058.patch
+CVE-2018-20481.patch
+CVE-2018-20662.patch
+CVE-2019-7310.patch
+CVE-2019-9200.patch
