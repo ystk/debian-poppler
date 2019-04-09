@@ -1,3 +1,13 @@
+poppler (0.26.5-2+deb8u9) jessie-security; urgency=medium
+
+  * Non-maintainer upload by the LTS team.
+  * CVE-2019-9631: cairo: Constrain number of cycles in rescale filter.
+    Pass address of the first byte after end of the source buffer
+    to downsample_row_box_filter() so that we can check
+    that we don't run out of it.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Mon, 08 Apr 2019 18:17:24 +0200
+
 poppler (0.26.5-2+deb8u8) jessie-security; urgency=high
 
   * Non-maintainer upload by the LTS team.
