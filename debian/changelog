@@ -1,3 +1,11 @@
+poppler (0.26.5-2+deb8u10) jessie-security; urgency=medium
+
+  * CVE-2019-10872: heap buffer overread in Splash::blitTransparent.
+  * CVE-2019-12293: heap buffer overread in JPXStream::init.
+  * CVE-2019-12360: stack buffer overread in FoFiTrueType::cvtSfnts.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Thu, 06 Jun 2019 12:02:44 +0200
+
 poppler (0.26.5-2+deb8u9) jessie-security; urgency=medium
 
   * Non-maintainer upload by the LTS team.
