@@ -1,3 +1,16 @@
+poppler (0.26.5-2+deb8u11) jessie-security; urgency=medium
+
+  * Non-maintainer upload by the LTS Team. 
+  * CVE-2019-12493
+    stack-based buffer over-read because GfxSeparationColorSpace
+    and GfxDeviceNColorSpace mishandle tint transform functions
+  * CVE-2018-21009
+    integer overflow in Parser::makeStream in Parser.cc
+  * CVE-2018-20650
+    denial of service due to the lack of a check for the dict data type
+ 
+ -- Thorsten Alteholz <debian@alteholz.de>  Thu, 26 Sep 2019 19:13:02 +0200
+
 poppler (0.26.5-2+deb8u10) jessie-security; urgency=medium
 
   * CVE-2019-10872: heap buffer overread in Splash::blitTransparent.
