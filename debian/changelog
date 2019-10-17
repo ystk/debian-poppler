@@ -1,3 +1,17 @@
+poppler (0.26.5-2+deb8u12) jessie-security; urgency=high
+
+  * Non-maintainer upload by the LTS Team.
+  * CVE-2019-9959
+    JPXStream::init function doesn't check for negative values of
+    stream length, leading to an Integer Overflow, leading to large
+    memory request causing DOS.
+  * CVE-2019-10871
+    Fix heap-based buffer over-read in the function
+    PSOutputDev::checkPageSlice at PSOutputDev.cc by defining
+    SPLASH_CMYK in builds.
+
+ -- Brian May <bam@debian.org>  Mon, 14 Oct 2019 17:24:52 +1100
+
 poppler (0.26.5-2+deb8u11) jessie-security; urgency=medium
 
   * Non-maintainer upload by the LTS Team. 
