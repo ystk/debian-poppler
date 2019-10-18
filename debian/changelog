@@ -1,3 +1,10 @@
+poppler (0.26.5-2+deb8u13) jessie-security; urgency=medium
+
+  * Revert change to fix CVE-2019-10871 because it breaks xpdf.
+    Closes: #942503.
+
+ -- Brian May <bam@debian.org>  Fri, 18 Oct 2019 16:38:57 +1100
+
 poppler (0.26.5-2+deb8u12) jessie-security; urgency=high
 
   * Non-maintainer upload by the LTS Team.

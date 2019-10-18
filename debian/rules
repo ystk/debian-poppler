@@ -19,9 +19,6 @@ export V=1
 # enable all the hardening options
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
-export DEB_CFLAGS_APPEND = -DSPLASH_CMYK
-export DEB_CXXFLAGS_APPEND = -DSPLASH_CMYK
-
 # DEB_* variables
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 
