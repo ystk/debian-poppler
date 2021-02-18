@@ -1,3 +1,18 @@
+poppler (0.26.5-2+deb8u14) jessie-security; urgency=high
+
+  * Non-maintainer upload by the ELTS team.
+  * Revert patch for CVE-2018-13988 to fix Debian bug #942391. There is no
+    evidence that CVE-2018-13988 leads to a buffer overflow. The out-of-bounds
+    read just triggers a segmentation fault.
+  * Fix CVE-2019-10018:
+    Floating point exception in the function PostScriptFunction::exec at
+    Function.cc
+  * Fix CVE-2019-14494:
+    There is a divide-by-zero error in the function
+    SplashOutputDev::tilingPatternFill at SplashOutputDev.cc.
+
+ -- Markus Koschany <apo@debian.org>  Thu, 22 Oct 2020 18:18:15 +0200
+
 poppler (0.26.5-2+deb8u13) jessie-security; urgency=medium
 
   * Revert change to fix CVE-2019-10871 because it breaks xpdf.
