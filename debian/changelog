@@ -1,3 +1,14 @@
+poppler (0.26.5-2+deb8u15) jessie-security; urgency=high
+
+  * Non-maintainer upload by the ELTS team.
+  * Fix CVE-2018-13988, CVE-2018-18897, CVE-2019-10873, CVE-2020-27778,
+    CVE-2022-27337 and CVE-2022-38784.
+    Several security vulnerabilities have been discovered in Poppler, a PDF
+    rendering library, that could lead to denial of service or possibly other
+    unspecified impact when processing maliciously crafted documents.
+
+ -- Markus Koschany <apo@debian.org>  Thu, 29 Sep 2022 14:12:52 +0200
+
 poppler (0.26.5-2+deb8u14) jessie-security; urgency=high
 
   * Non-maintainer upload by the ELTS team.
