@@ -1,0 +1,45 @@
+From 4ea11b283029d145979f64c246e4ad3f78510c65 Mon Sep 17 00:00:00 2001
+From: Albert Astals Cid <aacid@kde.org>
+Date: Wed, 23 Dec 2020 23:27:02 +0100
+Subject: FoFiType1C: Fix crashes with broken files
+
+---
+ fofi/FoFiType1C.cc | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/fofi/FoFiType1C.cc b/fofi/FoFiType1C.cc
+index 2f3e5e25..b37deee4 100644
+--- a/fofi/FoFiType1C.cc
++++ b/fofi/FoFiType1C.cc
+@@ -200,7 +200,6 @@ void FoFiType1C::convertToType1(char *psName, const char **newEncoding, GBool as
+   Type1CIndexVal val;
+   GooString *buf;
+   char buf2[256];
+-  const char **enc;
+   GBool ok;
+   int i;
+ 
+@@ -312,9 +311,9 @@ void FoFiType1C::convertToType1(char *psName, const char **newEncoding, GBool as
+     (*outputFunc)(outputStream, "256 array\n", 10);
+     (*outputFunc)(outputStream,
+ 		  "0 1 255 {1 index exch /.notdef put} for\n", 40);
+-    enc = newEncoding ? newEncoding : (const char **)encoding;
++    const char **enc = newEncoding ? newEncoding : (const char **)encoding;
+     for (i = 0; i < 256; ++i) {
+-      if (enc[i]) {
++      if (enc && enc[i]) {
+ 	buf = GooString::format("dup {0:d} /{1:s} put\n", i, enc[i]);
+ 	(*outputFunc)(outputStream, buf->getCString(), buf->getLength());
+ 	delete buf;
+@@ -2030,7 +2029,7 @@ GBool FoFiType1C::parse() {
+       readPrivateDict(0, 0, &privateDicts[0]);
+     } else {
+       getIndex(topDict.fdArrayOffset, &fdIdx, &parsedOk);
+-      if (!parsedOk) {
++      if (!parsedOk || fdIdx.len <= 0) {
+ 	return gFalse;
+       }
+       nFDs = fdIdx.len;
+-- 
+2.30.2
+

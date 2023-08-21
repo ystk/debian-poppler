@@ -47,3 +47,5 @@ CVE-2019-10873.patch
 CVE-2020-27778.patch
 CVE-2022-27337.patch
 CVE-2022-38784.patch
+0001-Fix-infinite-looping-in-cvtGlyph-with-broken-files.patch
+0002-FoFiType1C-Fix-crashes-with-broken-files.patch

@@ -1,0 +1,120 @@
+From 920c8df5e0e875b4203e3caa5eabe1ef342f674b Mon Sep 17 00:00:00 2001
+From: Albert Astals Cid <aacid@kde.org>
+Date: Mon, 21 Dec 2020 22:57:44 +0100
+Subject: Fix infinite looping in cvtGlyph with broken files
+
+---
+ fofi/FoFiType1C.cc | 20 +++++++++++++++-----
+ fofi/FoFiType1C.h  |  4 +++-
+ fofi/Makefile.am   |  2 ++
+ 3 files changed, 20 insertions(+), 6 deletions(-)
+
+diff --git a/fofi/FoFiType1C.cc b/fofi/FoFiType1C.cc
+index c6c9361c..2f3e5e25 100644
+--- a/fofi/FoFiType1C.cc
++++ b/fofi/FoFiType1C.cc
+@@ -552,8 +552,9 @@ void FoFiType1C::convertToCIDType0(char *psName, int *codeMap, int nCodes,
+ 	if (!ok) {
+ 	  subrIdx.pos = -1;
+ 	}
++	std::set<int> offsetBeingParsed;
+ 	cvtGlyph(val.pos, val.len, charStrings,
+-		 &subrIdx, &privateDicts[fdSelect ? fdSelect[gid] : 0], gTrue);
++		 &subrIdx, &privateDicts[fdSelect ? fdSelect[gid] : 0], gTrue, offsetBeingParsed);
+       }
+     }
+   }
+@@ -1184,7 +1185,8 @@ void FoFiType1C::eexecCvtGlyph(Type1CEexecBuf *eb, const char *glyphName,
+ 
+   // generate the charstring
+   charBuf = new GooString();
+-  cvtGlyph(offset, nBytes, charBuf, subrIdx, pDict, gTrue);
++  std::set<int> offsetBeingParsed;
++  cvtGlyph(offset, nBytes, charBuf, subrIdx, pDict, gTrue, offsetBeingParsed);
+ 
+   buf = GooString::format("/{0:s} {1:d} RD ", glyphName, charBuf->getLength());
+   eexecWrite(eb, buf->getCString());
+@@ -1198,7 +1200,7 @@ void FoFiType1C::eexecCvtGlyph(Type1CEexecBuf *eb, const char *glyphName,
+ 
+ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf,
+ 			  Type1CIndex *subrIdx, Type1CPrivateDict *pDict,
+-			  GBool top) {
++			  GBool top, std::set<int> &offsetBeingParsed) {
+   Type1CIndexVal val;
+   GBool ok, dFP;
+   double d, dx, dy;
+@@ -1206,6 +1208,12 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf,
+   Guchar byte;
+   int pos, subrBias, start, i, k;
+ 
++  if (offsetBeingParsed.find(offset) != offsetBeingParsed.end()) {
++    return;
++  }
++
++  auto offsetEmplaceResult = offsetBeingParsed.emplace(offset);
++
+   start = charBuf->getLength();
+   if (top) {
+     charBuf->append((char)73);
+@@ -1363,7 +1371,7 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf,
+ 	  ok = gTrue;
+ 	  getIndexVal(subrIdx, k, &val, &ok);
+ 	  if (likely(ok && val.pos != offset)) {
+-	    cvtGlyph(val.pos, val.len, charBuf, subrIdx, pDict, gFalse);
++	    cvtGlyph(val.pos, val.len, charBuf, subrIdx, pDict, gFalse, offsetBeingParsed);
+ 	  }
+ 	} else {
+ 	  //~ error(-1, "Too few args to Type 2 callsubr");
+@@ -1598,7 +1606,7 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf,
+ 	  ok = gTrue;
+ 	  getIndexVal(&gsubrIdx, k, &val, &ok);
+ 	  if (likely(ok && val.pos != offset)) {
+-	    cvtGlyph(val.pos, val.len, charBuf, subrIdx, pDict, gFalse);
++	    cvtGlyph(val.pos, val.len, charBuf, subrIdx, pDict, gFalse, offsetBeingParsed);
+ 	  }
+ 	} else {
+ 	  //~ error(-1, "Too few args to Type 2 callgsubr");
+@@ -1826,6 +1834,8 @@ void FoFiType1C::cvtGlyph(int offset, int nBytes, GooString *charBuf,
+       r2 = (byte + r2) * 52845 + 22719;
+     }
+   }
++
++  offsetBeingParsed.erase(offsetEmplaceResult.first);
+ }
+ 
+ void FoFiType1C::cvtGlyphWidth(GBool useOp, GooString *charBuf,
+diff --git a/fofi/FoFiType1C.h b/fofi/FoFiType1C.h
+index 698dccd7..004b23c7 100644
+--- a/fofi/FoFiType1C.h
++++ b/fofi/FoFiType1C.h
+@@ -31,6 +31,8 @@
+ #include "goo/gtypes.h"
+ #include "FoFiBase.h"
+ 
++#include <set>
++
+ class GooString;
+ 
+ //------------------------------------------------------------------------
+@@ -214,7 +216,7 @@ private:
+ 		     Type1CPrivateDict *pDict);
+   void cvtGlyph(int offset, int nBytes, GooString *charBuf,
+ 		Type1CIndex *subrIdx, Type1CPrivateDict *pDict,
+-		GBool top);
++		GBool top, std::set<int> &offsetBeingParsed);
+   void cvtGlyphWidth(GBool useOp, GooString *charBuf,
+ 		     Type1CPrivateDict *pDict);
+   void cvtNum(double x, GBool isFP, GooString *charBuf);
+diff --git a/fofi/Makefile.am b/fofi/Makefile.am
+index c4654dd2..e40b2f59 100644
+--- a/fofi/Makefile.am
++++ b/fofi/Makefile.am
+@@ -26,3 +26,5 @@ libfofi_la_SOURCES =		\
+ 	FoFiType1C.cc		\
+ 	FoFiIdentifier.cc	\
+ 	FoFiType1C.h
++
++AM_CXXFLAGS = -std=gnu++11
+-- 
+2.30.2
+
